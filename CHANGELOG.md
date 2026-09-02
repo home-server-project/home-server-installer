@@ -2,7 +2,7 @@
 
 All notable changes to Home Server Installer are documented here.
 
-## 0.1.0-alpha.1 - 2026-09-02
+## 0.1-alpha - 2026-09-02
 
 Initial repository alpha assembled from the verified disposable-VM installer
 runbook.

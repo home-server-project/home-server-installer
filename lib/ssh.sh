@@ -2,7 +2,7 @@
 
 validate_ssh_public_key() {
     local file="$1"
-    local first_line type payload extra
+    local first_line type payload _comment
 
     [[ -r "$file" ]] || fatal "SSH public key not readable: $file"
 
@@ -13,7 +13,7 @@ validate_ssh_public_key() {
     first_line="$(grep -v '^[[:space:]]*$' "$file" | head -n 1)"
     [[ -n "$first_line" ]] || fatal "SSH public key file is empty"
 
-    read -r type payload extra <<< "$first_line"
+    read -r type payload _comment <<< "$first_line"
     case "$type" in
         ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521|sk-ssh-ed25519@openssh.com|sk-ecdsa-sha2-nistp256@openssh.com)
             ;;

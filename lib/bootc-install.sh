@@ -15,6 +15,7 @@ run_bootc_install() {
     info "Root UUID: $HSI_ROOT_UUID"
     info "Boot UUID: $HSI_BOOT_UUID"
 
+    # shellcheck disable=SC2016 -- variables intentionally expand inside the target container.
     env TMPDIR="$HSI_SCRATCH_TMP" \
         podman run --rm \
         --pull=never \

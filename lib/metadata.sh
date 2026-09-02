@@ -26,7 +26,7 @@ metadata_key_allowed() {
 metadata_set() {
     local key="$1" value="$2"
     printf -v "$key" '%s' "$value"
-    export "$key"
+    export "${key?}"
 }
 
 load_metadata_file() {

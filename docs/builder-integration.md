@@ -31,7 +31,7 @@ Example:
 
 ```text
 INSTALLER_FORMAT_VERSION=1
-INSTALLER_VERSION=0.1.0-alpha.1
+INSTALLER_VERSION=0.1-alpha
 IMAGE_VARIANT=home-server-ucore-hci
 IMAGE_REF=ghcr.io/home-server-project/home-server-ucore-hci:lts
 IMAGE_DIGEST=sha256:<resolved-digest>

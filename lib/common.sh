@@ -2,7 +2,7 @@
 
 set -o pipefail
 
-HSI_VERSION="${HSI_VERSION:-0.1.0-alpha.1}"
+HSI_VERSION="${HSI_VERSION:-0.1-alpha}"
 HSI_TARGET_MOUNT="${HSI_TARGET_MOUNT:-/var/mnt/home-server-target}"
 HSI_PODMAN_BIND="${HSI_PODMAN_BIND:-/var/lib/containers}"
 HSI_LOG_PREFIX="[home-server-installer]"

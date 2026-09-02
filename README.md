@@ -192,7 +192,7 @@ GitHub Actions also runs ShellCheck.
 `VERSION` is the canonical Installer version. Pushing a matching tag such as:
 
 ```text
-v0.1.0-alpha.1
+v0.1-alpha
 ```
 
 runs the release workflow, tests the repository, creates `.tar.gz` and `.zip`
