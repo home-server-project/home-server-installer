@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-HSI_VERSION="test"
 # shellcheck source=../lib/common.sh
 source "$ROOT/lib/common.sh"
 # shellcheck source=../lib/ssh.sh
