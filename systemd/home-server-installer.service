@@ -1,0 +1,18 @@
+[Unit]
+Description=Home Server Installer
+After=multi-user.target
+ConditionPathExists=/run/media/iso/home-server/config/install.env
+
+[Service]
+Type=idle
+ExecStart=/run/media/iso/home-server/installer/bin/home-server-installer
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,2 @@
+disable zincati.service
+enable rpm-ostreed-automatic.timer

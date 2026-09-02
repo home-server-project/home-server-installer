@@ -1,0 +1,271 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+HSI_VERSION="$(cat "$REPO_ROOT/VERSION" 2>/dev/null || printf 'development')"
+export HSI_VERSION
+
+# shellcheck source=../lib/common.sh
+source "$REPO_ROOT/lib/common.sh"
+# shellcheck source=../lib/metadata.sh
+source "$REPO_ROOT/lib/metadata.sh"
+# shellcheck source=../lib/ssh.sh
+source "$REPO_ROOT/lib/ssh.sh"
+# shellcheck source=../lib/disks.sh
+source "$REPO_ROOT/lib/disks.sh"
+# shellcheck source=../lib/partitions.sh
+source "$REPO_ROOT/lib/partitions.sh"
+# shellcheck source=../lib/image.sh
+source "$REPO_ROOT/lib/image.sh"
+# shellcheck source=../lib/bootc-install.sh
+source "$REPO_ROOT/lib/bootc-install.sh"
+# shellcheck source=../lib/update-policy.sh
+source "$REPO_ROOT/lib/update-policy.sh"
+# shellcheck source=../lib/verify.sh
+source "$REPO_ROOT/lib/verify.sh"
+# shellcheck source=../lib/report.sh
+source "$REPO_ROOT/lib/report.sh"
+
+DRY_RUN=0
+REQUESTED_TARGET=""
+ISO_ROOT_OVERRIDE=""
+
+usage() {
+    cat <<EOF_USAGE
+Home Server Installer ${HSI_VERSION}
+
+Usage:
+  home-server-installer [--dry-run] [--target /dev/DEVICE] [--iso-root PATH]
+  home-server-installer --help
+
+Options:
+  --dry-run          Validate payload, discover disks, and print the plan only.
+                     No disk is modified.
+  --target DEVICE    Preselect a whole target disk. Destructive confirmation is
+                     still mandatory in normal mode.
+  --iso-root PATH    Override installation-media root for development/testing.
+  --help             Show this help.
+
+Alpha verified path:
+  - x86_64
+  - UEFI (Secure Boot is not yet part of the verified path)
+  - embedded OCI archive
+  - home-server-default-v1 partition layout
+EOF_USAGE
+}
+
+parse_args() {
+    while (($#)); do
+        case "$1" in
+            --dry-run)
+                DRY_RUN=1
+                shift
+                ;;
+            --target)
+                (($# >= 2)) || fatal "--target requires a device"
+                REQUESTED_TARGET="$2"
+                shift 2
+                ;;
+            --iso-root)
+                (($# >= 2)) || fatal "--iso-root requires a path"
+                ISO_ROOT_OVERRIDE="$2"
+                shift 2
+                ;;
+            --help|-h)
+                usage
+                exit 0
+                ;;
+            *)
+                fatal "Unknown option: $1"
+                ;;
+        esac
+    done
+}
+
+cleanup_on_exit() {
+    local rc=$?
+    trap - EXIT INT TERM
+    ((rc == 0)) && return 0
+
+    set +e
+    printf '\n' >&2
+    warn "Installer stopped because a command failed (exit $rc)."
+    if [[ -n "${HSI_SCRATCH_PODMAN:-}" || -n "${HSI_SCRATCH_TMP:-}" ]]; then
+        warn "Cleaning temporary target-backed Podman mounts."
+        cleanup_target_podman_workspace
+    fi
+    if mountpoint -q "$HSI_TARGET_MOUNT" 2>/dev/null; then
+        warn "Target filesystem is intentionally left mounted at $HSI_TARGET_MOUNT for diagnosis."
+    fi
+    return "$rc"
+}
+
+trap cleanup_on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+print_header() {
+    cat <<EOF_HEADER
+
+Home Server Installer ${HSI_VERSION}
+========================================
+
+Builder creates the installation media.
+Installer creates the machine.
+
+This alpha performs a destructive bare-metal installation only after an exact
+ERASE confirmation.
+
+EOF_HEADER
+}
+
+print_payload_plan() {
+    local archive="$1" pubkey="$2"
+    cat <<EOF_PLAN
+Installation payload
+--------------------
+Image variant:      ${IMAGE_VARIANT:-unspecified}
+Moving reference:   ${IMAGE_REF}
+Resolved digest:    ${IMAGE_DIGEST}
+OCI archive:        ${OCI_ARCHIVE}
+Archive SHA-256:    ${OCI_ARCHIVE_SHA256}
+SSH fingerprint:    $(ssh_key_fingerprint "$pubkey")
+Partition policy:   ${PARTITION_POLICY}
+Update policy:      ${UPDATE_POLICY}
+Installer format:   ${INSTALLER_FORMAT_VERSION}
+Installer version:  ${HSI_VERSION}
+Media root:         ${ISO_ROOT}
+Archive size:       $(human_bytes "$(stat -c %s "$archive")")
+EOF_PLAN
+}
+
+choose_final_action() {
+    local answer=""
+    printf '\nInstallation verified successfully.\n'
+    printf 'Remove the installation USB/CD before the next boot.\n\n'
+    read -r -p "Choose [P]ower off (recommended), [R]eboot, or [S]hell [P]: " answer || true
+    answer="${answer:-P}"
+    case "${answer^^}" in
+        P|POWEROFF)
+            systemctl poweroff
+            ;;
+        R|REBOOT)
+            systemctl reboot
+            ;;
+        S|SHELL)
+            info "Leaving live environment running. Installed target is unmounted."
+            ;;
+        *)
+            warn "Unknown choice; powering off."
+            systemctl poweroff
+            ;;
+    esac
+}
+
+main() {
+    local metadata_file archive pubkey target deploy expected_confirmation
+
+    parse_args "$@"
+    [[ -z "$ISO_ROOT_OVERRIDE" ]] || export HSI_ISO_ROOT="$ISO_ROOT_OVERRIDE"
+
+    if ((DRY_RUN == 0)); then
+        require_root "$@"
+        require_supported_host
+        require_cmd \
+            bootc blkid find findmnt grep install lsblk mkfs.ext4 mkfs.vfat mkfs.xfs \
+            mount mountpoint ostree podman readlink restorecon sgdisk sha256sum skopeo \
+            ssh-keygen systemctl udevadm umount wipefs
+    else
+        require_cmd findmnt grep lsblk readlink sha256sum stat
+    fi
+
+    print_header
+
+    ISO_ROOT="$(locate_iso_root)"
+    export ISO_ROOT
+    metadata_file="$ISO_ROOT/home-server/config/install.env"
+    load_metadata_file "$metadata_file"
+    validate_metadata
+
+    archive="$(resolve_iso_payload_path "$ISO_ROOT" "$OCI_ARCHIVE")"
+    pubkey="$(resolve_iso_payload_path "$ISO_ROOT" "$SSH_PUBLIC_KEY")"
+
+    [[ -r "$archive" ]] || fatal "OCI archive not found: $archive"
+    validate_ssh_public_key "$pubkey"
+    validate_embedded_archive "$archive"
+
+    print_payload_plan "$archive" "$pubkey"
+    printf '\n'
+
+    discover_disks "$ISO_ROOT"
+    print_disks
+
+    if [[ -n "$REQUESTED_TARGET" ]]; then
+        target="$(readlink -f "$REQUESTED_TARGET")"
+        validate_target_disk "$target"
+    elif ((DRY_RUN == 1)); then
+        info "Dry-run complete. Supply --target to include a partition proposal for one disk."
+        exit 0
+    else
+        target="$(select_disk_interactive)"
+        validate_target_disk "$target"
+    fi
+
+    printf '\n'
+    print_partition_plan "$target"
+
+    if ((DRY_RUN == 1)); then
+        printf '\nDRY RUN: no changes were made.\n'
+        exit 0
+    fi
+
+    cat <<EOF_WARNING
+
+DESTRUCTIVE OPERATION
+---------------------
+ALL DATA on this exact disk will be destroyed:
+
+  $target
+  Model: $(lsblk -dn -o MODEL "$target" | sed 's/[[:space:]]*$//')
+  Size:  $(human_bytes "$(lsblk -dn -b -o SIZE "$target")")
+
+No other disk is an intended target.
+EOF_WARNING
+
+    expected_confirmation="ERASE $target"
+    if ! confirm_exact "$expected_confirmation" "Type exactly: $expected_confirmation"; then
+        fatal "Confirmation did not match. Nothing was erased."
+    fi
+
+    info "Destructive confirmation accepted for $target"
+    partition_and_format "$target"
+    mount_target "$target"
+    capture_target_uuids "$target"
+
+    prepare_target_podman_workspace
+    load_embedded_image "$archive"
+    run_bootc_install "$pubkey"
+
+    deploy="$(find_deployment_root)"
+    info "OSTree deployment root: $deploy"
+
+    verify_bls_uuids "$HSI_ROOT_UUID" "$HSI_BOOT_UUID"
+    apply_update_policy "$deploy" "$REPO_ROOT/config/00-home-server.preset"
+    verify_update_policy_offline "$deploy"
+
+    cleanup_target_podman_workspace
+    finalize_bootc_install
+
+    verify_installation "$target" "$deploy"
+    write_install_report "$deploy" "$target" "$pubkey"
+
+    sync
+    unmount_target
+    trap - EXIT INT TERM
+
+    info "Installation complete and target filesystems unmounted."
+    choose_final_action
+}
+
+main "$@"

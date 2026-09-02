@@ -1,0 +1,59 @@
+name: Release installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify tag matches VERSION
+        run: |
+          version="$(cat VERSION)"
+          test "${GITHUB_REF_NAME}" = "v${version}"
+
+      - name: Run tests
+        run: bash tests/run.sh
+
+      - name: Build release archives
+        run: |
+          set -euo pipefail
+          version="$(cat VERSION)"
+          mkdir -p dist
+          git archive \
+            --format=tar.gz \
+            --prefix="home-server-installer-${version}/" \
+            -o "dist/home-server-installer-${version}.tar.gz" \
+            HEAD
+          git archive \
+            --format=zip \
+            --prefix="home-server-installer-${version}/" \
+            -o "dist/home-server-installer-${version}.zip" \
+            HEAD
+          (cd dist && sha256sum *.tar.gz *.zip > SHA256SUMS)
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(cat VERSION)"
+          prerelease=()
+          case "$version" in
+            *alpha*|*beta*|*rc*) prerelease=(--prerelease) ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" \
+            dist/home-server-installer-"${version}".tar.gz \
+            dist/home-server-installer-"${version}".zip \
+            dist/SHA256SUMS \
+            --title "Home Server Installer ${version}" \
+            --generate-notes \
+            "${prerelease[@]}"

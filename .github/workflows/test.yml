@@ -1,0 +1,35 @@
+name: Test installer
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Bash syntax
+        run: |
+          find bin lib tests -type f -name '*.sh' -o -path 'bin/home-server-installer' | while read -r file; do
+            bash -n "$file"
+          done
+
+      - name: ShellCheck
+        run: |
+          shellcheck bin/home-server-installer lib/*.sh tests/*.sh
+
+      - name: Unit tests
+        run: bash tests/run.sh
