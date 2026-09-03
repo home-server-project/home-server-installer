@@ -56,7 +56,14 @@ run_bootc_install() {
 
 find_deployment_root() {
     local -a deployments=()
-    mapfile -t deployments < <(find "$HSI_TARGET_MOUNT/ostree/deploy" -type d -path '*/deploy/*.0' -print 2>/dev/null)
+    mapfile -t deployments < <(
+        find "$HSI_TARGET_MOUNT/ostree/deploy" \
+            -mindepth 3 \
+            -maxdepth 3 \
+            -type d \
+            -path '*/deploy/*.0' \
+            -print 2>/dev/null
+    )
 
     ((${#deployments[@]} == 1)) || fatal "Expected exactly one OSTree deployment root; found ${#deployments[@]}"
     printf '%s\n' "${deployments[0]}"
