@@ -28,7 +28,7 @@ actual="$(find_deployment_root)"
 SECOND_HASH='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 mkdir -p "$HSI_TARGET_MOUNT/ostree/deploy/fedora-coreos/deploy/$SECOND_HASH.0"
 
-if find_deployment_root >/dev/null 2>&1; then
+if (find_deployment_root >/dev/null 2>&1); then
     printf 'FAIL multiple deployment roots were accepted\n' >&2
     exit 1
 fi
