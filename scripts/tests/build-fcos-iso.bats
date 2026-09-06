@@ -88,7 +88,13 @@ run_expect_fail() {
   [ "$status" -ne 0 ]
 }
 
-@test "FCOS builder verifies payload and keeps live Ignition bounded" {
+@test "FCOS builder verifies the real archive entry and bounds live Ignition" {
+  run grep -F "cpio -id --quiet 'opt/home-server-installer/knuckle'" "$SCRIPT"
+  [ "$status" -eq 0 ]
+
+  run grep -F "cpio -id --quiet './opt/home-server-installer/knuckle'" "$SCRIPT"
+  [ "$status" -ne 0 ]
+
   run grep -F 'cmp -s "$BINARY" "$VERIFY_DIR/opt/home-server-installer/knuckle"' "$SCRIPT"
   [ "$status" -eq 0 ]
 
