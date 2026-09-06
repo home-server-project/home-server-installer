@@ -36,7 +36,9 @@ func (m *Model) initForm() {
 			m.usernameInput = "core"
 		}
 		if m.Wizard.State.Config.Hostname == "" {
-			if m.Wizard.State.Config.OS == model.OSFCOS {
+			if m.Wizard.State.Config.HomeServerImage != "" {
+				m.Wizard.State.Config.Hostname = "homeserver"
+			} else if m.Wizard.State.Config.OS == model.OSFCOS {
 				m.Wizard.State.Config.Hostname = "fcos"
 			} else {
 				m.Wizard.State.Config.Hostname = "flatcar"

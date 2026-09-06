@@ -120,23 +120,25 @@ func TestHandleEnter_StorageWithIgnitionURL_ValidationError(t *testing.T) {
 
 // --- handleEnter: StepWelcome ---
 
-func TestHandleEnter_Welcome_ChannelSelection(t *testing.T) {
+func TestHandleEnter_Welcome_HomeServerUCore(t *testing.T) {
 	w := newTestWizard()
 	w.State.CurrentStep = model.StepWelcome
-	w.State.Config.Channel = "stable" // pre-set to pass validation
-	w.State.Config.Hostname = "test"
 
 	m := New(w)
-	// Phase 1: OS picker — select Flatcar (cursor 0)
 	m.cursor = 0
 	_, _ = m.handleEnter()
 
-	// Phase 2: channel picker — select "beta" (index 2 in stable,lts,beta,alpha)
-	m.cursor = 2
-	_, _ = m.handleEnter()
-
-	if m.Wizard.State.Config.Channel != "beta" {
-		t.Errorf("expected channel beta, got %q", m.Wizard.State.Config.Channel)
+	if m.Wizard.State.Config.OS != model.OSFCOS {
+		t.Errorf("expected FCOS bootstrap OS, got %q", m.Wizard.State.Config.OS)
+	}
+	if m.Wizard.State.Config.HomeServerImage != model.HomeServerUCoreImage {
+		t.Errorf("unexpected Home Server destination %q", m.Wizard.State.Config.HomeServerImage)
+	}
+	if m.Wizard.State.Config.Channel != "stable" {
+		t.Errorf("expected stable FCOS stream, got %q", m.Wizard.State.Config.Channel)
+	}
+	if m.Wizard.State.CurrentStep != model.StepNetwork {
+		t.Errorf("expected StepNetwork, got %v", m.Wizard.State.CurrentStep)
 	}
 }
 
@@ -251,7 +253,7 @@ func TestMaxCursor_AllSteps(t *testing.T) {
 		disks  int
 		expect int
 	}{
-		{model.StepWelcome, 0, 3}, // 3 OS choices (Flatcar | FCOS | Bluefin Server) in OS picker
+		{model.StepWelcome, 0, 2}, // Home Server uCore | Home Server uCore HCI
 		{model.StepStorage, 3, 3}, // number of disks
 		{model.StepStorage, 0, 0}, // no disks
 		{model.StepSysext, 0, 0},  // empty sysexts
@@ -290,20 +292,18 @@ func TestMaxCursor_SysextWithEntries(t *testing.T) {
 
 // --- handleEnter: BluefinDDI OS picker ---
 
-func TestHandleEnter_Welcome_BluefinDDI_SkipsToStorage(t *testing.T) {
+func TestHandleEnter_Welcome_HomeServerUCoreHCI(t *testing.T) {
 	w := newTestWizard()
 	w.State.CurrentStep = model.StepWelcome
 
 	m := New(w)
-	// cursor 2 = Bluefin Server in the 3-option OS picker
-	m.cursor = 2
+	m.cursor = 1
 	_, _ = m.handleEnter()
 
-	// BluefinDDI selection should skip channel picker and go straight to Storage
-	if m.Wizard.State.CurrentStep != model.StepStorage {
-		t.Errorf("BluefinDDI selection should jump to StepStorage, got %v", m.Wizard.State.CurrentStep)
+	if m.Wizard.State.Config.HomeServerImage != model.HomeServerUCoreHCIImage {
+		t.Errorf("unexpected Home Server HCI destination %q", m.Wizard.State.Config.HomeServerImage)
 	}
-	if m.Wizard.State.Config.OS != model.OSBluefinDDI {
-		t.Errorf("OS should be OSBluefinDDI, got %q", m.Wizard.State.Config.OS)
+	if m.Wizard.State.CurrentStep != model.StepNetwork {
+		t.Errorf("expected StepNetwork, got %v", m.Wizard.State.CurrentStep)
 	}
 }

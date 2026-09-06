@@ -174,7 +174,7 @@ func TestMaxCursor(t *testing.T) {
 	}{
 		{
 			step:     model.StepWelcome,
-			expected: 3, // OS picker (Flatcar | FCOS | Bluefin Server) — shown first via osSubView
+			expected: 2, // Home Server uCore | Home Server uCore HCI
 		},
 		{
 			step: model.StepStorage,

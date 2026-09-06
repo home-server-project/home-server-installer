@@ -207,7 +207,11 @@ func (m *Model) buildTailscaleForm() *huh.Form {
 func (m *Model) buildReviewForm() *huh.Form {
 	cfg := &m.Wizard.State.Config
 	title := "⚠️  DESTRUCTIVE OPERATION — Install Flatcar to disk?"
-	if cfg.OS == model.OSFCOS {
+	if cfg.HomeServerImage == model.HomeServerUCoreHCIImage {
+		title = "⚠️  DESTRUCTIVE OPERATION — Install Home Server uCore HCI to disk?"
+	} else if cfg.HomeServerImage == model.HomeServerUCoreImage {
+		title = "⚠️  DESTRUCTIVE OPERATION — Install Home Server uCore to disk?"
+	} else if cfg.OS == model.OSFCOS {
 		title = "⚠️  DESTRUCTIVE OPERATION — Install Fedora CoreOS to disk?"
 	}
 
@@ -272,7 +276,9 @@ func (m *Model) reviewSummary() string {
 	}
 	b.WriteString("\n\n")
 	b.WriteString("Install Plan\n")
-	if cfg.OS != "" {
+	if cfg.HomeServerImage != "" {
+		fmt.Fprintf(&b, "  Destination: %s\n", cfg.HomeServerImage)
+	} else if cfg.OS != "" {
 		fmt.Fprintf(&b, "  OS: %s\n", cfg.OS)
 	}
 	fmt.Fprintf(&b, "  Channel: %s", cfg.Channel)
@@ -344,7 +350,7 @@ func (m *Model) renderZenChrome() string {
 	sloganStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("250")).Italic(true)
 
 	// Pretext
-	b.WriteString(presentsStyle.Render("  Project Bluefin presents..."))
+	b.WriteString(presentsStyle.Render("  Home Server Project · powered by Project Bluefin Knuckle"))
 	b.WriteString("\n\n")
 
 	// Logo: spaced letterform in double-line frame
@@ -357,7 +363,7 @@ func (m *Model) renderZenChrome() string {
 
 	// Subtitle + slogan
 	b.WriteString("  ")
-	b.WriteString(accentColor.Render("homelab ignition configurator"))
+	b.WriteString(accentColor.Render("Home Server uCore installer"))
 	b.WriteString("\n")
 	b.WriteString("  ")
 	b.WriteString(sloganStyle.Render("The real thing, right from the CNCF. Legends will rise."))
@@ -628,7 +634,7 @@ func (m *Model) viewOSPicker() string {
 	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true)
 
-	b.WriteString("  Select an operating system:\n\n")
+	b.WriteString("  Select Home Server image:\n\n")
 
 	type osOption struct {
 		id   string
@@ -636,9 +642,8 @@ func (m *Model) viewOSPicker() string {
 		desc string
 	}
 	options := []osOption{
-		{model.OSFlatcar, "Flatcar Container Linux", "Immutable, container-optimised Linux. Ideal for Kubernetes nodes and edge workloads."},
-		{model.OSFCOS, "Fedora CoreOS", "Fedora's immutable, auto-updating container host. Based on rpm-ostree with Ignition provisioning."},
-		{model.OSBluefinDDI, "Install Bluefin Server", "systemd-native DDI image installer. Partitions, provisions users, and installs the bootloader via systemd-repart."},
+		{model.HomeServerUCoreImage, "Home Server uCore", "Standard Home Server image. Small downstream of Universal Blue uCore."},
+		{model.HomeServerUCoreHCIImage, "Home Server uCore HCI", "Virtualization/HCI image for libvirt/QEMU home-server hosts."},
 	}
 
 	for i, opt := range options {

@@ -115,9 +115,10 @@ func (w *Wizard) Next() error {
 
 	if w.State.CurrentStep < model.StepDone {
 		w.State.CurrentStep++
-		// BluefinDDI skips Sysext, Nvidia, Tailscale, and Update steps —
-		// those are all Flatcar/FCOS-only concerns.
-		if w.isBluefinDDI() {
+		// BluefinDDI and the Home Server profile skip generic Sysext, Nvidia,
+		// Tailscale, and FCOS update-policy steps. Home Server only uses FCOS as
+		// the bootstrap OS before rebasing to uCore.
+		if w.isMinimalInstallTarget() {
 			for w.State.CurrentStep == model.StepSysext ||
 				w.State.CurrentStep == model.StepNvidia ||
 				w.State.CurrentStep == model.StepTailscale ||
@@ -141,8 +142,8 @@ func (w *Wizard) Next() error {
 func (w *Wizard) Previous() {
 	if w.State.CurrentStep > model.StepWelcome {
 		w.State.CurrentStep--
-		// BluefinDDI: skip back over Sysext/Nvidia/Tailscale/Update.
-		if w.isBluefinDDI() {
+		// BluefinDDI/Home Server: skip back over Sysext/Nvidia/Tailscale/Update.
+		if w.isMinimalInstallTarget() {
 			for w.State.CurrentStep == model.StepUpdate ||
 				w.State.CurrentStep == model.StepTailscale ||
 				w.State.CurrentStep == model.StepNvidia ||
@@ -166,6 +167,14 @@ func (w *Wizard) Previous() {
 // skipped for DDI installs — systemd-repart handles partitioning, no Ignition.
 func (w *Wizard) isBluefinDDI() bool {
 	return w.State.Config.OS == model.OSBluefinDDI
+}
+
+func (w *Wizard) isHomeServerInstall() bool {
+	return w.State.Config.HomeServerImage != ""
+}
+
+func (w *Wizard) isMinimalInstallTarget() bool {
+	return w.isBluefinDDI() || w.isHomeServerInstall()
 }
 
 // isNvidiaSelected returns true when the nvidia-runtime sysext is toggled on.

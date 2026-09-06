@@ -171,6 +171,10 @@ func (g *Generator) GenerateFCOSButane(cfg *model.InstallConfig) (string, error)
 		return "", fmt.Errorf("config cannot be nil")
 	}
 
+	if cfg.HomeServerImage != "" {
+		return g.GenerateHomeServerFCOSButane(cfg)
+	}
+
 	for _, s := range filterSelected(cfg.Sysexts) {
 		if !strings.HasPrefix(s.URL, "https://") {
 			return "", fmt.Errorf("sysext %q has non-HTTPS download URL %q", s.Name, s.URL)

@@ -449,7 +449,7 @@ func (m *Model) maxCursor() int {
 	switch m.Wizard.State.CurrentStep {
 	case model.StepWelcome:
 		if m.osSubView {
-			return 3 // Flatcar | FCOS | Bluefin Server
+			return 2 // Home Server uCore | Home Server uCore HCI
 		}
 		return m.channelCardCount()
 	case model.StepStorage:
@@ -475,13 +475,31 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	switch step {
 	case model.StepWelcome:
 		if m.osSubView {
-			// OS picker — cursor 0 = Flatcar, cursor 1 = FCOS, cursor 2 = Bluefin Server
-			osList := []string{model.OSFlatcar, model.OSFCOS, model.OSBluefinDDI}
-			if m.cursor >= 0 && m.cursor < len(osList) {
-				m.Wizard.State.Config.OS = osList[m.cursor]
+			images := []string{model.HomeServerUCoreImage, model.HomeServerUCoreHCIImage}
+			if m.cursor < 0 || m.cursor >= len(images) {
+				m.cursor = 0
 			}
-			// BluefinDDI has no channel — skip straight to Storage.
-			if m.Wizard.State.Config.OS == model.OSBluefinDDI {
+			cfg := &m.Wizard.State.Config
+			cfg.OS = model.OSFCOS
+			cfg.Channel = "stable"
+			cfg.HomeServerImage = images[m.cursor]
+			// FCOS is a short-lived bootstrap in the Home Server path. Generic
+			// sysext/swap/Tailscale/update-policy choices are deliberately skipped.
+			cfg.Sysexts = nil
+			cfg.Swap = model.SwapConfig{}
+			cfg.Tailscale = model.TailscaleConfig{}
+			cfg.UpdateStrategy = model.UpdateStrategy{}
+			cfg.NvidiaDriverVersion = ""
+			m.osSubView = false
+			// Fall through to Wizard.Next(): Welcome -> Network.
+		} else {
+			// Apply channel/stream selection from card cursor
+			channels := m.channelList()
+			if m.cursor >= 0 && m.cursor < len(channels) {
+				m.Wizard.State.Config.Channel = channels[m.cursor]
+			}
+			// If IgnitionURL is set, skip directly to Storage
+			if m.Wizard.State.Config.IgnitionURL != "" {
 				m.Wizard.GoToStep(model.StepStorage)
 				m.err = nil
 				m.cursor = 0
@@ -489,23 +507,6 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 				m.initForm()
 				return m, nil
 			}
-			m.osSubView = false
-			m.cursor = 0
-			return m, nil
-		}
-		// Apply channel/stream selection from card cursor
-		channels := m.channelList()
-		if m.cursor >= 0 && m.cursor < len(channels) {
-			m.Wizard.State.Config.Channel = channels[m.cursor]
-		}
-		// If IgnitionURL is set, skip directly to Storage
-		if m.Wizard.State.Config.IgnitionURL != "" {
-			m.Wizard.GoToStep(model.StepStorage)
-			m.err = nil
-			m.cursor = 0
-			m.initStepFields()
-			m.initForm()
-			return m, nil
 		}
 	case model.StepStorage:
 		if m.cursor < len(m.Wizard.State.Disks) {
@@ -757,9 +758,12 @@ func (m *Model) initStepFields() {
 	m.fieldIdx = 0
 	switch m.Wizard.State.CurrentStep {
 	case model.StepWelcome:
-		// Show OS picker first; channel cards follow after OS selection.
+		// Home Server V1 exposes only the two supported uCore destinations.
 		m.osSubView = true
 		m.cursor = 0
+		if m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreHCIImage {
+			m.cursor = 1
+		}
 		m.fields = nil
 	case model.StepNvidia:
 		// Position cursor at the currently configured driver version.
@@ -1260,13 +1264,19 @@ func (m *Model) viewInstall() string {
 	doneStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
 
 	var osName string
-	switch m.Wizard.State.Config.OS {
-	case model.OSFCOS:
-		osName = "Fedora CoreOS"
-	case model.OSBluefinDDI:
-		osName = "Bluefin Server"
-	default:
-		osName = "Flatcar Container Linux"
+	if m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreHCIImage {
+		osName = "Home Server uCore HCI"
+	} else if m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreImage {
+		osName = "Home Server uCore"
+	} else {
+		switch m.Wizard.State.Config.OS {
+		case model.OSFCOS:
+			osName = "Fedora CoreOS"
+		case model.OSBluefinDDI:
+			osName = "Bluefin Server"
+		default:
+			osName = "Flatcar Container Linux"
+		}
 	}
 	fmt.Fprintf(&b, "Installing %s...\n\n", osName)
 
@@ -1298,13 +1308,19 @@ func (m *Model) viewDone() string {
 	}
 
 	var osName string
-	switch cfg.OS {
-	case model.OSFCOS:
-		osName = "Fedora CoreOS"
-	case model.OSBluefinDDI:
-		osName = "Bluefin Server"
-	default:
-		osName = "Flatcar Container Linux"
+	if cfg.HomeServerImage == model.HomeServerUCoreHCIImage {
+		osName = "Home Server uCore HCI"
+	} else if cfg.HomeServerImage == model.HomeServerUCoreImage {
+		osName = "Home Server uCore"
+	} else {
+		switch cfg.OS {
+		case model.OSFCOS:
+			osName = "Fedora CoreOS"
+		case model.OSBluefinDDI:
+			osName = "Bluefin Server"
+		default:
+			osName = "Flatcar Container Linux"
+		}
 	}
 	fmt.Fprintf(&b, "%s has been installed:\n\n", osName)
 

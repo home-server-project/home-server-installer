@@ -8,66 +8,60 @@ import (
 	"github.com/projectbluefin/knuckle/internal/wizard"
 )
 
-// ── OS picker sub-view ────────────────────────────────────────────────────────
+// ── Home Server target picker ────────────────────────────────────────────────
 
-func TestOSPicker_ShowsTwoOptions(t *testing.T) {
+func TestOSPicker_ShowsHomeServerTargets(t *testing.T) {
 	w := newTestWizard()
 	w.State.CurrentStep = model.StepWelcome
 	m := New(w)
-	// osSubView is true after initStepFields for StepWelcome
 	if !m.osSubView {
 		t.Fatal("osSubView should be true after New() at StepWelcome")
 	}
 	out := m.viewChannelCards()
-	if !strings.Contains(out, "Flatcar Container Linux") {
-		t.Errorf("OS picker should show 'Flatcar Container Linux': %q", out)
+	if !strings.Contains(out, "Home Server uCore") {
+		t.Errorf("picker should show Home Server uCore: %q", out)
 	}
-	if !strings.Contains(out, "Fedora CoreOS") {
-		t.Errorf("OS picker should show 'Fedora CoreOS': %q", out)
+	if !strings.Contains(out, "Home Server uCore HCI") {
+		t.Errorf("picker should show Home Server uCore HCI: %q", out)
+	}
+	if strings.Contains(out, "Flatcar Container Linux") || strings.Contains(out, "Bluefin Server") {
+		t.Errorf("Home Server V1 picker should hide generic OS targets: %q", out)
 	}
 }
 
-func TestOSPicker_SelectFlatcar_ThenShowsChannelCards(t *testing.T) {
+func TestOSPicker_SelectHomeServerUCore_AdvancesToNetwork(t *testing.T) {
 	w := newTestWizard()
 	w.State.CurrentStep = model.StepWelcome
 	m := New(w)
-
-	// Phase 1: select Flatcar (cursor 0)
 	m.cursor = 0
 	_, _ = m.handleEnter()
 
-	if m.Wizard.State.Config.OS != model.OSFlatcar {
-		t.Errorf("expected OS=flatcar, got %q", m.Wizard.State.Config.OS)
+	if m.Wizard.State.Config.OS != model.OSFCOS {
+		t.Errorf("expected bootstrap OS=fcos, got %q", m.Wizard.State.Config.OS)
 	}
-	if m.osSubView {
-		t.Error("osSubView should be false after OS selection")
+	if m.Wizard.State.Config.HomeServerImage != model.HomeServerUCoreImage {
+		t.Errorf("unexpected Home Server image %q", m.Wizard.State.Config.HomeServerImage)
 	}
-	// Should now render channel cards, not OS picker
-	out := m.viewChannelCards()
-	if !strings.Contains(out, "Select a release channel") {
-		t.Errorf("after OS selection, should show channel cards: %q", out[:min(200, len(out))])
+	if m.Wizard.State.CurrentStep != model.StepNetwork {
+		t.Errorf("expected StepNetwork, got %v", m.Wizard.State.CurrentStep)
+	}
+	if m.Wizard.State.Config.Swap.Enabled {
+		t.Error("Home Server bootstrap must not provision generic FCOS swap")
 	}
 }
 
-func TestOSPicker_SelectFCOS_ThenShowsStreamCards(t *testing.T) {
+func TestOSPicker_SelectHomeServerUCoreHCI_AdvancesToNetwork(t *testing.T) {
 	w := newTestWizard()
 	w.State.CurrentStep = model.StepWelcome
 	m := New(w)
-
-	// Phase 1: select FCOS (cursor 1)
 	m.cursor = 1
 	_, _ = m.handleEnter()
 
-	if m.Wizard.State.Config.OS != model.OSFCOS {
-		t.Errorf("expected OS=fcos, got %q", m.Wizard.State.Config.OS)
+	if m.Wizard.State.Config.HomeServerImage != model.HomeServerUCoreHCIImage {
+		t.Errorf("unexpected Home Server image %q", m.Wizard.State.Config.HomeServerImage)
 	}
-	if m.osSubView {
-		t.Error("osSubView should be false after OS selection")
-	}
-	// Should now render FCOS stream cards
-	out := m.viewChannelCards()
-	if !strings.Contains(out, "Fedora CoreOS stream") {
-		t.Errorf("after FCOS selection, should show stream cards: %q", out[:min(200, len(out))])
+	if m.Wizard.State.CurrentStep != model.StepNetwork {
+		t.Errorf("expected StepNetwork, got %v", m.Wizard.State.CurrentStep)
 	}
 }
 

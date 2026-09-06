@@ -56,9 +56,17 @@ const (
 	OSBluefinDDI = "bluefin-ddi"
 )
 
+// Home Server V1 destination images. The installer first lays down Fedora
+// CoreOS, then a one-shot service rebases directly to the selected signed image.
+const (
+	HomeServerUCoreImage    = "ghcr.io/home-server-project/home-server-ucore:lts"
+	HomeServerUCoreHCIImage = "ghcr.io/home-server-project/home-server-ucore-hci:lts"
+)
+
 // InstallConfig is the complete installation configuration built by the wizard.
 type InstallConfig struct {
 	OS                  string // "flatcar" | "fcos"; defaults to "flatcar" for backward compatibility
+	HomeServerImage     string // selected signed Home Server uCore destination; empty for generic Knuckle flows
 	Arch                string // amd64 or arm64 (determined at ISO build time; default "amd64")
 	Channel             string // stable, beta, alpha, edge
 	Version             string // optional: pin to specific Flatcar version (flatcar-install -V)

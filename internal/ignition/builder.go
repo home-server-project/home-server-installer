@@ -145,6 +145,10 @@ func renderTemplate(name, body string, data any) (string, error) {
 // builderFuncMap is shared by every section template so YAML escaping is
 // consistent across features.
 var builderFuncMap = template.FuncMap{
+	"indentBlock": func(spaces int, s string) string {
+		pad := strings.Repeat(" ", spaces)
+		return pad + strings.ReplaceAll(s, "\n", "\n"+pad)
+	},
 	"yamlEscape": func(s string) string {
 		s = strings.ReplaceAll(s, `\`, `\\`)
 		s = strings.ReplaceAll(s, `"`, `\"`)
