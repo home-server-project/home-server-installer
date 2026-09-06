@@ -75,17 +75,40 @@ run_expect_fail() {
   run grep -F '90-home-server-installer.sh' "$SCRIPT"
   [ "$status" -eq 0 ]
 
-  run grep -F 'initrd  /knuckle.img' "$SCRIPT"
-  [ "$status" -eq 0 ]
-
-  run grep -F 'initrd  /ignition.img' "$SCRIPT"
-  [ "$status" -eq 0 ]
-
   run grep -F 'base64.b64encode' "$SCRIPT"
   [ "$status" -ne 0 ]
 
   run grep -F 'data:;base64' "$SCRIPT"
   [ "$status" -ne 0 ]
+}
+
+@test "FCOS builder concatenates one boot initrd in the required order" {
+  run grep -F 'cat "$FCOS_INITRAMFS" "$FCOS_ROOTFS" "$KNUCKLE_INITRD" "$IGN_INITRD" > "$COMBINED_INITRD"' "$SCRIPT"
+  [ "$status" -eq 0 ]
+
+  run grep -F 'initrd  /home-server-initrd.img' "$SCRIPT"
+  [ "$status" -eq 0 ]
+
+  run grep -F 'initrd  /fcos-initramfs.img' "$SCRIPT"
+  [ "$status" -ne 0 ]
+
+  run grep -F 'initrd  /fcos-rootfs.img' "$SCRIPT"
+  [ "$status" -ne 0 ]
+
+  run grep -F 'initrd  /knuckle.img' "$SCRIPT"
+  [ "$status" -ne 0 ]
+
+  run grep -F 'initrd  /ignition.img' "$SCRIPT"
+  [ "$status" -ne 0 ]
+
+  run grep -F 'EXPECTED_COMBINED_SIZE=' "$SCRIPT"
+  [ "$status" -eq 0 ]
+
+  run grep -F 'ACTUAL_COMBINED_SIZE=' "$SCRIPT"
+  [ "$status" -eq 0 ]
+
+  run grep -F "INITRD_COUNT=\"\$(grep -c '^initrd[[:space:]]' <<<\"\$ENTRY_TEXT\")\"" "$SCRIPT"
+  [ "$status" -eq 0 ]
 }
 
 @test "FCOS builder verifies the real archive entry and bounds live Ignition" {
