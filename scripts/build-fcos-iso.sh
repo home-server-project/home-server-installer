@@ -160,9 +160,11 @@ else
     echo "  Using cached PXE artifacts from $ISO_BASENAME"
 fi
 
-KERNEL="$(find "$PXE_DIR" -maxdepth 1 -type f -name "*-live-kernel.${COREOS_ARCH}" -print -quit)"
-FCOS_INITRAMFS="$(find "$PXE_DIR" -maxdepth 1 -type f -name "*-live-initramfs.${COREOS_ARCH}.img" -print -quit)"
-FCOS_ROOTFS="$(find "$PXE_DIR" -maxdepth 1 -type f -name "*-live-rootfs.${COREOS_ARCH}.img" -print -quit)"
+# `iso extract pxe` prefixes the ISO stem to the lower-cased IMAGES/PXEBOOT
+# filenames, e.g. ...-vmlinuz, ...-initrd.img, and ...-rootfs.img.
+KERNEL="$(find "$PXE_DIR" -maxdepth 1 -type f -name '*-vmlinuz' -print -quit)"
+FCOS_INITRAMFS="$(find "$PXE_DIR" -maxdepth 1 -type f -name '*-initrd.img' -print -quit)"
+FCOS_ROOTFS="$(find "$PXE_DIR" -maxdepth 1 -type f -name '*-rootfs.img' -print -quit)"
 
 for artifact in "$KERNEL" "$FCOS_INITRAMFS" "$FCOS_ROOTFS"; do
     [[ -n "$artifact" && -f "$artifact" ]] || { echo "error: FCOS PXE artifact missing after extraction" >&2; exit 1; }
