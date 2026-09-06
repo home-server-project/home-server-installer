@@ -67,7 +67,7 @@ jobs:
           done
           if [[ $flaky_detected -eq 1 ]]; then
             echo "::warning::Potential flaky tests detected — some runs failed. Check logs above."
-            exit 1  # Fail CI so flaky tests are not silently ignored
+            exit 1
           fi
           echo "✓ All 5 runs passed — no flaky tests detected"
 
@@ -246,6 +246,65 @@ jobs:
         with:
           name: iso-smoke-serial-log
           path: .vm/iso-smoke-serial.log
+          retention-days: 7
+
+  fcos-iso-boot-smoke:
+    name: Home Server FCOS ISO boot smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: "1.26.6"
+          check-latest: true
+
+      - name: build Knuckle binary
+        run: |
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+            go build -buildvcs=false -ldflags="-s -w" \
+            -o knuckle-linux-amd64 ./cmd/knuckle
+
+      - name: install FCOS ISO dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xorriso mtools cpio systemd-boot-efi qemu-system-x86 ovmf
+          curl -fL https://github.com/coreos/coreos-installer/releases/latest/download/coreos-installer_amd64 \
+            -o /tmp/coreos-installer
+          chmod +x /tmp/coreos-installer
+          sudo install -m 0755 /tmp/coreos-installer /usr/local/bin/coreos-installer
+          coreos-installer --version
+
+      - name: enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: build Home Server FCOS installer ISO
+        run: |
+          chmod +x ./scripts/build-fcos-iso.sh ./scripts/fcos-iso-smoke.sh
+          ./scripts/build-fcos-iso.sh --stream stable --arch amd64 \
+            --binary ./knuckle-linux-amd64
+
+      - name: boot FCOS ISO and verify separate Knuckle initrd
+        run: |
+          QEMU_BIN=qemu-system-x86_64 \
+            ./scripts/fcos-iso-smoke.sh \
+            output/knuckle-fcos-installer-stable-amd64.iso \
+            /usr/share/OVMF/OVMF_CODE_4M.fd \
+            180
+
+      - name: upload FCOS serial log on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: fcos-iso-smoke-serial-log
+          path: .vm/fcos-iso-smoke-serial.log
           retention-days: 7
 
   cross-compile-arm64:
