@@ -10,13 +10,10 @@ import (
 	"github.com/projectbluefin/knuckle/internal/runner"
 )
 
-// FCOSInstaller runs coreos-installer via the runner.
-//
-// coreos-installer differs from flatcar-install in three key ways:
-//   - Disk path is a positional argument after the "install" subcommand.
-//   - Stream is passed as --stream rather than -C.
-//   - Disk preparation (wipefs, GPT repair) is handled internally — callers
-//     must NOT invoke wipefs or sfdisk before or after coreos-installer.
+// FCOSInstaller runs coreos-installer via the runner for generic FCOS targets.
+// Home Server uses Fedora CoreOS only as its live environment and is routed to
+// HomeServerInstaller, which prepares the requested layout and installs the
+// selected signed uCore image directly with bootc.
 type FCOSInstaller struct {
 	Runner       runner.Runner
 	Generator    *ignition.Generator
@@ -33,14 +30,15 @@ func NewFCOSInstaller(r runner.Runner, logger *slog.Logger) *FCOSInstaller {
 	}
 }
 
-// Install performs the FCOS installation:
-//  1. Generate FCOS Butane → compile Ignition (uses GenerateFCOSButane)
-//  2. Write ignition to secure temp file (reuses WriteIgnitionFile)
-//  3. Run: coreos-installer install --stream <stream> [--ignition-file <path>] <disk>
-//  4. Done — no wipefs or sfdisk steps.
+// Install performs either the Home Server direct bootc path or the generic
+// FCOS coreos-installer path.
 func (i *FCOSInstaller) Install(ctx context.Context, cfg *model.InstallConfig, progress func(step string)) error {
 	if cfg == nil {
 		return fmt.Errorf("install config cannot be nil")
+	}
+
+	if cfg.HomeServerImage != "" {
+		return NewHomeServerInstaller(i.Runner, i.Logger).Install(ctx, cfg, progress)
 	}
 
 	if cfg.Version != "" {
