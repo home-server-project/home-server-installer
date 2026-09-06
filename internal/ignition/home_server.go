@@ -52,15 +52,33 @@ func (g *Generator) GenerateHomeServerFCOSButane(cfg *model.InstallConfig) (stri
 	}
 	b.AddStorageFile(policyFrag)
 
-	serviceFrag, err := renderTemplate("home-server-autorebase", homeServerAutorebaseTemplate, struct{ Image string }{Image: cfg.HomeServerImage})
+	autorebaseScriptFrag, err := renderTemplate("home-server-autorebase-script", homeServerAutorebaseScriptTemplate, struct{ Image string }{Image: cfg.HomeServerImage})
+	if err != nil {
+		return "", fmt.Errorf("rendering Home Server autorebase script: %w", err)
+	}
+	b.AddStorageFile(autorebaseScriptFrag)
+
+	cleanupScriptFrag, err := renderTemplate("home-server-postrebase-cleanup-script", homeServerPostRebaseCleanupScriptTemplate, struct{}{})
+	if err != nil {
+		return "", fmt.Errorf("rendering Home Server post-rebase cleanup script: %w", err)
+	}
+	b.AddStorageFile(cleanupScriptFrag)
+
+	autorebaseServiceFrag, err := renderTemplate("home-server-autorebase", homeServerAutorebaseTemplate, struct{}{})
 	if err != nil {
 		return "", fmt.Errorf("rendering Home Server autorebase service: %w", err)
+	}
+
+	cleanupServiceFrag, err := renderTemplate("home-server-postrebase-cleanup", homeServerPostRebaseCleanupTemplate, struct{}{})
+	if err != nil {
+		return "", fmt.Errorf("rendering Home Server post-rebase cleanup service: %w", err)
 	}
 
 	// Zincati belongs to the temporary FCOS deployment, not the final Home
 	// Server update policy. Mask it so it cannot race the one-shot rebase.
 	b.AddSystemdUnit("- name: zincati.service\n  mask: true")
-	b.AddSystemdUnit(serviceFrag)
+	b.AddSystemdUnit(autorebaseServiceFrag)
+	b.AddSystemdUnit(cleanupServiceFrag)
 
 	return b.BuildFCOS(), nil
 }
@@ -87,7 +105,7 @@ var homeServerPolicyTemplate = `- path: /etc/containers/policy.json
   contents:
     inline: |
       {
-        "default": [{"type": "insecureAcceptAnything"}],
+        "default": [{"type": "reject"}],
         "transports": {
           "docker": {
             "ghcr.io/home-server-project/home-server-ucore": [{
@@ -104,22 +122,162 @@ var homeServerPolicyTemplate = `- path: /etc/containers/policy.json
         }
       }`
 
+var homeServerAutorebaseScriptTemplate = `- path: /etc/home-server-installer/autorebase.sh
+  mode: 0755
+  overwrite: true
+  contents:
+    inline: |
+      #!/usr/bin/bash
+      set -u
+
+      IMAGE="{{.Image}}"
+      POLICY="/etc/containers/policy.json"
+      FCOS_DEFAULT_POLICY="/usr/etc/containers/policy.json"
+      BOOTSTRAP_KEY="/etc/containers/home-server-project.pub"
+      STATE_DIR="/var/lib/home-server-installer"
+      FAILURE_MOTD="/etc/motd.d/99-home-server-installer-rebase-failed"
+      MAX_ATTEMPTS=5
+      DELAYS=(5 10 20 40)
+
+      log() {
+          echo "[home-server-installer] $*"
+      }
+
+      write_failure() {
+          local reason="$1"
+          mkdir -p "${STATE_DIR}" /etc/motd.d
+          touch "${STATE_DIR}/rebase-failed"
+          cat > "${FAILURE_MOTD}" <<EOF_MOTD
+      Home Server Installer: automatic uCore rebase failed.
+
+      ${reason}
+
+      Target: ${IMAGE}
+      Check:  systemctl status home-server-autorebase.service
+      Logs:   journalctl -u home-server-autorebase.service -b
+      Retry:  sudo systemctl restart home-server-autorebase.service
+      EOF_MOTD
+          log "ERROR: ${reason}"
+      }
+
+      mkdir -p "${STATE_DIR}" /etc/motd.d
+      rm -f "${STATE_DIR}/rebase-failed" "${FAILURE_MOTD}"
+
+      for attempt in 1 2 3 4 5; do
+          log "signed rebase attempt ${attempt}/${MAX_ATTEMPTS}: ${IMAGE}"
+          if /usr/bin/rpm-ostree rebase --bypass-driver "ostree-image-signed:docker://${IMAGE}"; then
+              log "signed rebase staged successfully"
+
+              # Restore the stock FCOS policy before reboot. This makes /etc match
+              # the current deployment default again, so OSTree's three-way merge
+              # can take the Home Server image's own policy instead of carrying the
+              # temporary bootstrap policy into the new deployment.
+              if [[ ! -f "${FCOS_DEFAULT_POLICY}" ]]; then
+                  write_failure "Signed rebase staged, but the FCOS default container policy is missing; refusing to reboot."
+                  exit 1
+              fi
+              if ! /usr/bin/cp --remove-destination "${FCOS_DEFAULT_POLICY}" "${POLICY}"; then
+                  write_failure "Signed rebase staged, but restoring the FCOS default container policy failed; refusing to reboot."
+                  exit 1
+              fi
+              if command -v restorecon >/dev/null 2>&1; then
+                  restorecon "${POLICY}" || true
+              fi
+              rm -f "${BOOTSTRAP_KEY}" "${FAILURE_MOTD}" "${STATE_DIR}/rebase-failed"
+              touch "${STATE_DIR}/rebase-staged"
+
+              /usr/bin/systemctl disable home-server-autorebase.service || true
+              sync
+              log "rebooting into Home Server uCore"
+              /usr/bin/systemctl reboot
+              exit 0
+          fi
+
+          if (( attempt < MAX_ATTEMPTS )); then
+              delay="${DELAYS[$((attempt - 1))]}"
+              log "attempt ${attempt} failed; retrying in ${delay}s"
+              sleep "${delay}"
+          fi
+      done
+
+      write_failure "Signed rebase failed after ${MAX_ATTEMPTS} attempts. The machine remains on Fedora CoreOS and can be retried safely."
+      exit 1`
+
+var homeServerPostRebaseCleanupScriptTemplate = `- path: /etc/home-server-installer/postrebase-cleanup.sh
+  mode: 0755
+  overwrite: true
+  contents:
+    inline: |
+      #!/usr/bin/bash
+      set -eu
+
+      POLICY="/etc/containers/policy.json"
+      IMAGE_DEFAULT_POLICY="/usr/etc/containers/policy.json"
+      STATE_DIR="/var/lib/home-server-installer"
+      FAILURE_MOTD="/etc/motd.d/99-home-server-installer-rebase-failed"
+
+      echo "[home-server-installer] finalizing Home Server image trust"
+
+      if [[ ! -f "${IMAGE_DEFAULT_POLICY}" ]]; then
+          echo "[home-server-installer] ERROR: Home Server image default policy is missing" >&2
+          exit 1
+      fi
+
+      # Replace any policy carried through the staged deployment with the policy
+      # baked into the Home Server image itself.
+      /usr/bin/cp --remove-destination "${IMAGE_DEFAULT_POLICY}" "${POLICY}"
+      if command -v restorecon >/dev/null 2>&1; then
+          restorecon "${POLICY}" || true
+      fi
+
+      rm -f /etc/containers/home-server-project.pub "${FAILURE_MOTD}"
+      rm -f "${STATE_DIR}/rebase-staged" "${STATE_DIR}/rebase-failed"
+      touch "${STATE_DIR}/rebase-complete"
+
+      /usr/bin/systemctl disable home-server-autorebase.service home-server-postrebase-cleanup.service || true
+      rm -f \
+          /etc/systemd/system/home-server-autorebase.service \
+          /etc/systemd/system/home-server-postrebase-cleanup.service \
+          /etc/systemd/system/multi-user.target.wants/home-server-autorebase.service \
+          /etc/systemd/system/multi-user.target.wants/home-server-postrebase-cleanup.service \
+          /etc/home-server-installer/autorebase.sh \
+          /etc/home-server-installer/postrebase-cleanup.sh
+      /usr/bin/systemctl daemon-reload || true
+
+      echo "[home-server-installer] Home Server image trust finalized"`
+
 var homeServerAutorebaseTemplate = `- name: home-server-autorebase.service
   enabled: true
   contents: |
     [Unit]
     Description=Home Server signed uCore auto-rebase
-    ConditionPathExists=!/etc/home-server-autorebase.done
+    ConditionPathExists=!/var/lib/home-server-installer/rebase-staged
     After=network-online.target
     Wants=network-online.target
 
     [Service]
     Type=oneshot
     StandardOutput=journal+console
-    ExecStart=/usr/bin/rpm-ostree rebase --bypass-driver ostree-image-signed:docker://{{.Image}}
-    ExecStart=/usr/bin/touch /etc/home-server-autorebase.done
-    ExecStart=/usr/bin/systemctl disable home-server-autorebase.service
-    ExecStart=/usr/bin/systemctl reboot
+    StandardError=journal+console
+    ExecStart=/etc/home-server-installer/autorebase.sh
+
+    [Install]
+    WantedBy=multi-user.target`
+
+var homeServerPostRebaseCleanupTemplate = `- name: home-server-postrebase-cleanup.service
+  enabled: true
+  contents: |
+    [Unit]
+    Description=Finalize Home Server container signature policy after rebase
+    ConditionPathExists=/var/lib/home-server-installer/rebase-staged
+    ConditionPathExists=/usr/lib/pki/containers/iegorch86.pub
+    After=local-fs.target
+
+    [Service]
+    Type=oneshot
+    StandardOutput=journal+console
+    StandardError=journal+console
+    ExecStart=/etc/home-server-installer/postrebase-cleanup.sh
 
     [Install]
     WantedBy=multi-user.target`

@@ -56,6 +56,28 @@ func TestGenerateHomeServerFCOSButanePolicyTemplateError(t *testing.T) {
 	}
 }
 
+func TestGenerateHomeServerFCOSButaneAutorebaseScriptTemplateError(t *testing.T) {
+	orig := homeServerAutorebaseScriptTemplate
+	homeServerAutorebaseScriptTemplate = "{{"
+	t.Cleanup(func() { homeServerAutorebaseScriptTemplate = orig })
+
+	_, err := NewGenerator().GenerateHomeServerFCOSButane(homeServerCoverageConfig())
+	if err == nil || !strings.Contains(err.Error(), "autorebase script") {
+		t.Fatalf("expected autorebase-script rendering error, got %v", err)
+	}
+}
+
+func TestGenerateHomeServerFCOSButaneCleanupScriptTemplateError(t *testing.T) {
+	orig := homeServerPostRebaseCleanupScriptTemplate
+	homeServerPostRebaseCleanupScriptTemplate = "{{"
+	t.Cleanup(func() { homeServerPostRebaseCleanupScriptTemplate = orig })
+
+	_, err := NewGenerator().GenerateHomeServerFCOSButane(homeServerCoverageConfig())
+	if err == nil || !strings.Contains(err.Error(), "post-rebase cleanup script") {
+		t.Fatalf("expected cleanup-script rendering error, got %v", err)
+	}
+}
+
 func TestGenerateHomeServerFCOSButaneServiceTemplateError(t *testing.T) {
 	orig := homeServerAutorebaseTemplate
 	homeServerAutorebaseTemplate = "{{"
@@ -64,6 +86,17 @@ func TestGenerateHomeServerFCOSButaneServiceTemplateError(t *testing.T) {
 	_, err := NewGenerator().GenerateHomeServerFCOSButane(homeServerCoverageConfig())
 	if err == nil || !strings.Contains(err.Error(), "autorebase service") {
 		t.Fatalf("expected autorebase-service rendering error, got %v", err)
+	}
+}
+
+func TestGenerateHomeServerFCOSButaneCleanupServiceTemplateError(t *testing.T) {
+	orig := homeServerPostRebaseCleanupTemplate
+	homeServerPostRebaseCleanupTemplate = "{{"
+	t.Cleanup(func() { homeServerPostRebaseCleanupTemplate = orig })
+
+	_, err := NewGenerator().GenerateHomeServerFCOSButane(homeServerCoverageConfig())
+	if err == nil || !strings.Contains(err.Error(), "post-rebase cleanup service") {
+		t.Fatalf("expected cleanup-service rendering error, got %v", err)
 	}
 }
 

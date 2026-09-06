@@ -34,8 +34,15 @@ func TestGenerateHomeServerFCOSButane_SignedMinimalBootstrap(t *testing.T) {
 		model.HomeServerUCoreImage,
 		"ostree-image-signed:docker://",
 		"sigstoreSigned",
+		`"default": [{"type": "reject"}]`,
 		"home-server-project.pub",
 		"home-server-autorebase.service",
+		"home-server-postrebase-cleanup.service",
+		"signed rebase attempt ${attempt}/${MAX_ATTEMPTS}",
+		"Signed rebase failed after ${MAX_ATTEMPTS} attempts",
+		"/usr/etc/containers/policy.json",
+		"/var/lib/home-server-installer/rebase-staged",
+		"/usr/lib/pki/containers/iegorch86.pub",
 		"zincati.service",
 		"mask: true",
 	} {
@@ -44,6 +51,7 @@ func TestGenerateHomeServerFCOSButane_SignedMinimalBootstrap(t *testing.T) {
 		}
 	}
 	for _, unwanted := range []string{
+		`"type": "insecureAcceptAnything"`,
 		"/etc/zincati/config.d/55-updates.toml",
 		"/var/swapfile",
 		"/etc/extensions/should-not-survive.raw",
