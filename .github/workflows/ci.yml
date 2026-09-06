@@ -272,10 +272,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xorriso mtools cpio systemd-boot-efi qemu-system-x86 ovmf
-          curl -fL https://github.com/coreos/coreos-installer/releases/latest/download/coreos-installer_amd64 \
-            -o /tmp/coreos-installer
-          chmod +x /tmp/coreos-installer
-          sudo install -m 0755 /tmp/coreos-installer /usr/local/bin/coreos-installer
+          sudo tee /usr/local/bin/coreos-installer >/dev/null <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec docker run --rm \
+            --security-opt label=disable \
+            -v "$PWD:$PWD" \
+            -w "$PWD" \
+            quay.io/coreos/coreos-installer:release "$@"
+          EOF
+          sudo chmod 0755 /usr/local/bin/coreos-installer
           coreos-installer --version
 
       - name: enable KVM access
