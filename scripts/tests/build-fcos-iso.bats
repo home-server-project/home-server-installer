@@ -75,11 +75,16 @@ run_expect_fail() {
   run grep -F '90-home-server-installer.sh' "$SCRIPT"
   [ "$status" -eq 0 ]
 
-  run grep -F 'base64.b64encode' "$SCRIPT"
-  [ "$status" -ne 0 ]
+  run grep -F 'data:text/plain;charset=utf-8;base64,' "$SCRIPT"
+  [ "$status" -eq 0 ]
 
-  run grep -F 'data:;base64' "$SCRIPT"
-  [ "$status" -ne 0 ]
+  run grep -F 'base64.b64encode(bootstrap.encode("utf-8"))' "$SCRIPT"
+  [ "$status" -eq 0 ]
+}
+
+@test "FCOS builder creates Knuckle cpio entries as root" {
+  run grep -F 'cpio --null -o -H newc --quiet --owner=0:0' "$SCRIPT"
+  [ "$status" -eq 0 ]
 }
 
 @test "FCOS builder concatenates one boot initrd in the required order" {
