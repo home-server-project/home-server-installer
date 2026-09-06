@@ -761,7 +761,6 @@ func (m *Model) initStepFields() {
 		// Home Server V1 exposes only the two supported uCore destinations.
 		m.osSubView = true
 		m.cursor = 0
-		//nolint:staticcheck // explicit Home Server target labels are clearer here.
 		if m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreHCIImage {
 			m.cursor = 1
 		}
@@ -1260,25 +1259,29 @@ func (m *Model) viewUpdate() string {
 	return b.String()
 }
 
+func installTargetDisplayName(cfg *model.InstallConfig) string {
+	switch cfg.HomeServerImage {
+	case model.HomeServerUCoreHCIImage:
+		return "Home Server uCore HCI"
+	case model.HomeServerUCoreImage:
+		return "Home Server uCore"
+	}
+
+	switch cfg.OS {
+	case model.OSFCOS:
+		return "Fedora CoreOS"
+	case model.OSBluefinDDI:
+		return "Bluefin Server"
+	default:
+		return "Flatcar Container Linux"
+	}
+}
+
 func (m *Model) viewInstall() string {
 	var b strings.Builder
 	doneStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
 
-	var osName string
-	if m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreHCIImage {
-		osName = "Home Server uCore HCI"
-	} else if m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreImage {
-		osName = "Home Server uCore"
-	} else {
-		switch m.Wizard.State.Config.OS {
-		case model.OSFCOS:
-			osName = "Fedora CoreOS"
-		case model.OSBluefinDDI:
-			osName = "Bluefin Server"
-		default:
-			osName = "Flatcar Container Linux"
-		}
-	}
+	osName := installTargetDisplayName(&m.Wizard.State.Config)
 	fmt.Fprintf(&b, "Installing %s...\n\n", osName)
 
 	// Completed phases with green checkmarks
@@ -1308,22 +1311,7 @@ func (m *Model) viewDone() string {
 		b.WriteString("\n✅ Installation Complete!\n\n")
 	}
 
-	var osName string
-	//nolint:staticcheck // explicit Home Server target labels are clearer here.
-	if cfg.HomeServerImage == model.HomeServerUCoreHCIImage {
-		osName = "Home Server uCore HCI"
-	} else if cfg.HomeServerImage == model.HomeServerUCoreImage {
-		osName = "Home Server uCore"
-	} else {
-		switch cfg.OS {
-		case model.OSFCOS:
-			osName = "Fedora CoreOS"
-		case model.OSBluefinDDI:
-			osName = "Bluefin Server"
-		default:
-			osName = "Flatcar Container Linux"
-		}
-	}
+	osName := installTargetDisplayName(cfg)
 	fmt.Fprintf(&b, "%s has been installed:\n\n", osName)
 
 	if cfg.Disk.Model != "" {
