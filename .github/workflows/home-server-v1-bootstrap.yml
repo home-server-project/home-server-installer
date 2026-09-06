@@ -15,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 2
+          fetch-depth: 4
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -27,21 +27,131 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git show HEAD^:.github/workflows/home-server-v1-bootstrap.yml > /tmp/bootstrap-old.yml
+          git show 84aaacab9ee975b3b3eb66829ecd4b8ebc6f4a2e:.github/workflows/home-server-v1-bootstrap.yml > /tmp/bootstrap-old.yml
           python3 - <<'PY'
           from pathlib import Path
 
           lines = Path('/tmp/bootstrap-old.yml').read_text().splitlines()
           start = next(i for i, line in enumerate(lines) if "python3 <<'PY'" in line)
           end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == 'PY')
+
           body = []
+          in_triple = False
           for line in lines[start + 1:end]:
-              if line.startswith('          '):
+              if not in_triple and line.startswith('          '):
                   line = line[10:]
+
               body.append(line)
+
+              if line.count("'''") % 2 == 1:
+                  in_triple = not in_triple
+
           Path('/tmp/apply-home-server-v1.py').write_text('\n'.join(body) + '\n')
           PY
           python3 /tmp/apply-home-server-v1.py
+
+      - name: Update downstream TUI expectations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('internal/tui/handleenter_test.go')
+          text = p.read_text()
+
+          old = '''func TestHandleEnter_Welcome_ChannelSelection(t *testing.T) {
+          \tw := newTestWizard()
+          \tw.State.CurrentStep = model.StepWelcome
+          \tw.State.Config.Channel = "stable" // pre-set to pass validation
+          \tw.State.Config.Hostname = "test"
+
+          \tm := New(w)
+          \t// Phase 1: OS picker — select Flatcar (cursor 0)
+          \tm.cursor = 0
+          \t_, _ = m.handleEnter()
+
+          \t// Phase 2: channel picker — select "beta" (index 2 in stable,lts,beta,alpha)
+          \tm.cursor = 2
+          \t_, _ = m.handleEnter()
+
+          \tif m.Wizard.State.Config.Channel != "beta" {
+          \t\tt.Errorf("expected channel beta, got %q", m.Wizard.State.Config.Channel)
+          \t}
+          }
+          '''
+          new = '''func TestHandleEnter_Welcome_HomeServerUCore(t *testing.T) {
+          \tw := newTestWizard()
+          \tw.State.CurrentStep = model.StepWelcome
+
+          \tm := New(w)
+          \tm.cursor = 0
+          \t_, _ = m.handleEnter()
+
+          \tif m.Wizard.State.Config.OS != model.OSFCOS {
+          \t\tt.Errorf("expected FCOS bootstrap OS, got %q", m.Wizard.State.Config.OS)
+          \t}
+          \tif m.Wizard.State.Config.HomeServerImage != model.HomeServerUCoreImage {
+          \t\tt.Errorf("unexpected Home Server destination %q", m.Wizard.State.Config.HomeServerImage)
+          \t}
+          \tif m.Wizard.State.Config.Channel != "stable" {
+          \t\tt.Errorf("expected stable FCOS stream, got %q", m.Wizard.State.Config.Channel)
+          \t}
+          \tif m.Wizard.State.CurrentStep != model.StepNetwork {
+          \t\tt.Errorf("expected StepNetwork, got %v", m.Wizard.State.CurrentStep)
+          \t}
+          }
+          '''
+          if old not in text:
+              raise SystemExit('Home Server welcome test block not found')
+          text = text.replace(old, new, 1)
+
+          text = text.replace(
+              '{model.StepWelcome, 0, 3}, // 3 OS choices (Flatcar | FCOS | Bluefin Server) in OS picker',
+              '{model.StepWelcome, 0, 2}, // Home Server uCore | Home Server uCore HCI',
+              1,
+          )
+
+          old = '''func TestHandleEnter_Welcome_BluefinDDI_SkipsToStorage(t *testing.T) {
+          \tw := newTestWizard()
+          \tw.State.CurrentStep = model.StepWelcome
+
+          \tm := New(w)
+          \t// cursor 2 = Bluefin Server in the 3-option OS picker
+          \tm.cursor = 2
+          \t_, _ = m.handleEnter()
+
+          \t// BluefinDDI selection should skip channel picker and go straight to Storage
+          \tif m.Wizard.State.CurrentStep != model.StepStorage {
+          \t\tt.Errorf("BluefinDDI selection should jump to StepStorage, got %v", m.Wizard.State.CurrentStep)
+          \t}
+          \tif m.Wizard.State.Config.OS != model.OSBluefinDDI {
+          \t\tt.Errorf("OS should be OSBluefinDDI, got %q", m.Wizard.State.Config.OS)
+          \t}
+          }
+          '''
+          new = '''func TestHandleEnter_Welcome_HomeServerUCoreHCI(t *testing.T) {
+          \tw := newTestWizard()
+          \tw.State.CurrentStep = model.StepWelcome
+
+          \tm := New(w)
+          \tm.cursor = 1
+          \t_, _ = m.handleEnter()
+
+          \tif m.Wizard.State.Config.HomeServerImage != model.HomeServerUCoreHCIImage {
+          \t\tt.Errorf("unexpected Home Server HCI destination %q", m.Wizard.State.Config.HomeServerImage)
+          \t}
+          \tif m.Wizard.State.CurrentStep != model.StepNetwork {
+          \t\tt.Errorf("expected StepNetwork, got %v", m.Wizard.State.CurrentStep)
+          \t}
+          }
+          '''
+          if old not in text:
+              raise SystemExit('Bluefin picker test block not found')
+          text = text.replace(old, new, 1)
+
+          p.write_text(text)
+          PY
 
       - name: Format
         shell: bash
@@ -59,6 +169,7 @@ jobs:
             internal/tui/forms.go \
             internal/tui/form_logic.go \
             internal/tui/fcos_tui_test.go \
+            internal/tui/handleenter_test.go \
             internal/tui/update_test.go
 
       - name: Test
