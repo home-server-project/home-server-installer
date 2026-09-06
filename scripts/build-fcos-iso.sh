@@ -124,7 +124,6 @@ if [[ ! -f "$BINARY" ]]; then
 else
     echo "[1/7] Using existing Knuckle binary: $BINARY"
 fi
-BINARY_SIZE="$(stat -c%s "$BINARY")"
 BINARY_SHA256="$(sha256sum "$BINARY" | awk '{print $1}')"
 echo "  binary : $(du -h "$BINARY" | cut -f1)"
 echo "  sha256 : $BINARY_SHA256"
