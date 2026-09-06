@@ -227,7 +227,7 @@ echo "  payload initrd: $(du -h "$KNUCKLE_INITRD" | cut -f1)"
 # Prove that the compressed payload contains the exact binary we were given.
 VERIFY_DIR="$(mktemp -d)"
 trap 'rm -rf "$VERIFY_DIR"' EXIT
-gzip -dc "$KNUCKLE_INITRD" | (cd "$VERIFY_DIR" && cpio -id --quiet './opt/home-server-installer/knuckle')
+gzip -dc "$KNUCKLE_INITRD" | (cd "$VERIFY_DIR" && cpio -id --quiet 'opt/home-server-installer/knuckle')
 cmp -s "$BINARY" "$VERIFY_DIR/opt/home-server-installer/knuckle" || {
     echo "error: Knuckle initrd payload does not match input binary" >&2
     exit 1
