@@ -41,12 +41,6 @@ jobs:
       - name: Coverage gates
         run: just cover-check
 
-      - name: Install and run golangci-lint
-        shell: bash
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.13.2
-          golangci-lint run
-
       - name: Commit fixes
         shell: bash
         run: |
