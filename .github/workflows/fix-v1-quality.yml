@@ -1,0 +1,280 @@
+name: Fix V1 quality
+
+on:
+  push:
+    paths:
+      - .github/workflows/fix-v1-quality.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: "1.26.6"
+          check-latest: true
+
+      - name: Setup just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3
+
+      - name: Apply lint fix and coverage tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path("internal/tui/tui.go")
+          text = p.read_text()
+
+          old_install = '''\tvar osName string
+          \tif m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreHCIImage {
+          \t\tosName = "Home Server uCore HCI"
+          \t} else if m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreImage {
+          \t\tosName = "Home Server uCore"
+          \t} else {
+          \t\tswitch m.Wizard.State.Config.OS {
+          \t\tcase model.OSFCOS:
+          \t\t\tosName = "Fedora CoreOS"
+          \t\tcase model.OSBluefinDDI:
+          \t\t\tosName = "Bluefin Server"
+          \t\tdefault:
+          \t\t\tosName = "Flatcar Container Linux"
+          \t\t}
+          \t}
+          '''
+          new_install = '''\tvar osName string
+          \tswitch m.Wizard.State.Config.HomeServerImage {
+          \tcase model.HomeServerUCoreHCIImage:
+          \t\tosName = "Home Server uCore HCI"
+          \tcase model.HomeServerUCoreImage:
+          \t\tosName = "Home Server uCore"
+          \tdefault:
+          \t\tswitch m.Wizard.State.Config.OS {
+          \t\tcase model.OSFCOS:
+          \t\t\tosName = "Fedora CoreOS"
+          \t\tcase model.OSBluefinDDI:
+          \t\t\tosName = "Bluefin Server"
+          \t\tdefault:
+          \t\t\tosName = "Flatcar Container Linux"
+          \t\t}
+          \t}
+          '''
+
+          old_done = '''\tvar osName string
+          \tif cfg.HomeServerImage == model.HomeServerUCoreHCIImage {
+          \t\tosName = "Home Server uCore HCI"
+          \t} else if cfg.HomeServerImage == model.HomeServerUCoreImage {
+          \t\tosName = "Home Server uCore"
+          \t} else {
+          \t\tswitch cfg.OS {
+          \t\tcase model.OSFCOS:
+          \t\t\tosName = "Fedora CoreOS"
+          \t\tcase model.OSBluefinDDI:
+          \t\t\tosName = "Bluefin Server"
+          \t\tdefault:
+          \t\t\tosName = "Flatcar Container Linux"
+          \t\t}
+          \t}
+          '''
+          new_done = '''\tvar osName string
+          \tswitch cfg.HomeServerImage {
+          \tcase model.HomeServerUCoreHCIImage:
+          \t\tosName = "Home Server uCore HCI"
+          \tcase model.HomeServerUCoreImage:
+          \t\tosName = "Home Server uCore"
+          \tdefault:
+          \t\tswitch cfg.OS {
+          \t\tcase model.OSFCOS:
+          \t\t\tosName = "Fedora CoreOS"
+          \t\tcase model.OSBluefinDDI:
+          \t\t\tosName = "Bluefin Server"
+          \t\tdefault:
+          \t\t\tosName = "Flatcar Container Linux"
+          \t\t}
+          \t}
+          '''
+
+          if text.count(old_install) != 1:
+              raise SystemExit("viewInstall block not found exactly once")
+          if text.count(old_done) != 1:
+              raise SystemExit("viewDone block not found exactly once")
+          text = text.replace(old_install, new_install, 1).replace(old_done, new_done, 1)
+          p.write_text(text)
+
+          Path("internal/ignition/home_server_coverage_test.go").write_text(r'''package ignition
+
+import (
+    "strings"
+    "testing"
+
+    "github.com/projectbluefin/knuckle/internal/model"
+)
+
+func homeServerCoverageConfig() *model.InstallConfig {
+    return &model.InstallConfig{
+        OS:              model.OSFCOS,
+        HomeServerImage: model.HomeServerUCoreImage,
+        Channel:         "stable",
+        Hostname:        "homeserver",
+        Timezone:        "UTC",
+        SSHKeys:         []string{"ssh-ed25519 AAAATEST home@test"},
+    }
+}
+
+func TestGenerateHomeServerFCOSButaneNilConfig(t *testing.T) {
+    if _, err := NewGenerator().GenerateHomeServerFCOSButane(nil); err == nil {
+        t.Fatal("expected nil config to fail")
+    }
+}
+
+func TestGenerateHomeServerFCOSButaneSharedFragmentError(t *testing.T) {
+    orig := hostnameTemplate
+    hostnameTemplate = "{{"
+    t.Cleanup(func() { hostnameTemplate = orig })
+
+    if _, err := NewGenerator().GenerateHomeServerFCOSButane(homeServerCoverageConfig()); err == nil {
+        t.Fatal("expected shared-fragment rendering error")
+    }
+}
+
+func TestGenerateHomeServerFCOSButaneKeyTemplateError(t *testing.T) {
+    orig := homeServerKeyTemplate
+    homeServerKeyTemplate = "{{"
+    t.Cleanup(func() { homeServerKeyTemplate = orig })
+
+    _, err := NewGenerator().GenerateHomeServerFCOSButane(homeServerCoverageConfig())
+    if err == nil || !strings.Contains(err.Error(), "signing key") {
+        t.Fatalf("expected signing-key rendering error, got %v", err)
+    }
+}
+
+func TestGenerateHomeServerFCOSButanePolicyTemplateError(t *testing.T) {
+    orig := homeServerPolicyTemplate
+    homeServerPolicyTemplate = "{{"
+    t.Cleanup(func() { homeServerPolicyTemplate = orig })
+
+    _, err := NewGenerator().GenerateHomeServerFCOSButane(homeServerCoverageConfig())
+    if err == nil || !strings.Contains(err.Error(), "signature policy") {
+        t.Fatalf("expected signature-policy rendering error, got %v", err)
+    }
+}
+
+func TestGenerateHomeServerFCOSButaneServiceTemplateError(t *testing.T) {
+    orig := homeServerAutorebaseTemplate
+    homeServerAutorebaseTemplate = "{{"
+    t.Cleanup(func() { homeServerAutorebaseTemplate = orig })
+
+    _, err := NewGenerator().GenerateHomeServerFCOSButane(homeServerCoverageConfig())
+    if err == nil || !strings.Contains(err.Error(), "autorebase service") {
+        t.Fatalf("expected autorebase-service rendering error, got %v", err)
+    }
+}
+
+func TestGenerateHomeServerFCOSButaneHCI(t *testing.T) {
+    cfg := homeServerCoverageConfig()
+    cfg.HomeServerImage = model.HomeServerUCoreHCIImage
+    out, err := NewGenerator().GenerateHomeServerFCOSButane(cfg)
+    if err != nil {
+        t.Fatalf("GenerateHomeServerFCOSButane HCI: %v", err)
+    }
+    if !strings.Contains(out, model.HomeServerUCoreHCIImage) {
+        t.Fatalf("HCI output missing selected image: %s", out)
+    }
+}
+''')
+
+          Path("internal/tui/home_server_coverage_test.go").write_text(r'''package tui
+
+import (
+    "strings"
+    "testing"
+
+    "github.com/projectbluefin/knuckle/internal/model"
+)
+
+func TestHomeServerInstallAndDoneNames(t *testing.T) {
+    tests := []struct {
+        image string
+        name  string
+    }{
+        {model.HomeServerUCoreImage, "Home Server uCore"},
+        {model.HomeServerUCoreHCIImage, "Home Server uCore HCI"},
+    }
+
+    for _, tc := range tests {
+        t.Run(tc.name, func(t *testing.T) {
+            w := newTestWizard()
+            w.State.Config.OS = model.OSFCOS
+            w.State.Config.Channel = "stable"
+            w.State.Config.HomeServerImage = tc.image
+            m := New(w)
+
+            if out := m.viewInstall(); !strings.Contains(out, "Installing "+tc.name) {
+                t.Fatalf("install view missing %q: %s", tc.name, out)
+            }
+            if out := m.viewDone(); !strings.Contains(out, tc.name+" has been installed") {
+                t.Fatalf("done view missing %q: %s", tc.name, out)
+            }
+        })
+    }
+}
+
+func TestHomeServerWelcomeRestoresHCISelection(t *testing.T) {
+    w := newTestWizard()
+    w.State.CurrentStep = model.StepWelcome
+    w.State.Config.HomeServerImage = model.HomeServerUCoreHCIImage
+    m := New(w)
+    if m.cursor != 1 {
+        t.Fatalf("expected HCI cursor 1, got %d", m.cursor)
+    }
+}
+
+func TestHomeServerUserFormDefaultsHostname(t *testing.T) {
+    w := newTestWizard()
+    w.State.CurrentStep = model.StepUser
+    w.State.Config.HomeServerImage = model.HomeServerUCoreImage
+    w.State.Config.Hostname = ""
+    _ = New(w)
+    if w.State.Config.Hostname != "homeserver" {
+        t.Fatalf("expected homeserver default hostname, got %q", w.State.Config.Hostname)
+    }
+}
+''')
+          PY
+
+          gofmt -w internal/tui/tui.go internal/tui/home_server_coverage_test.go internal/ignition/home_server_coverage_test.go
+
+      - name: Unit tests and vet
+        run: |
+          go test ./...
+          go vet ./...
+
+      - name: Coverage gates
+        run: just cover-check
+
+      - name: Install and run golangci-lint
+        shell: bash
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.13.2
+          golangci-lint run
+
+      - name: Commit fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/fix-v1-quality.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "test: satisfy Home Server V1 quality gates"
+          git push origin HEAD:main
