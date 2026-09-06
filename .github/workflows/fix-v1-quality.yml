@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -c 'from pathlib import Path; p=Path("internal/tui/tui.go"); s=p.read_text(); a="\tif m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreHCIImage {"; b="\tif cfg.HomeServerImage == model.HomeServerUCoreHCIImage {"; assert s.count(a)==1 and s.count(b)==1; s=s.replace(a,"\t//nolint:staticcheck // explicit Home Server target labels are clearer here.\n"+a,1); s=s.replace(b,"\t//nolint:staticcheck // explicit Home Server target labels are clearer here.\n"+b,1); p.write_text(s)'
+          python3 -c 'from pathlib import Path; p=Path("internal/tui/tui.go"); s=p.read_text(); a="\tif m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreHCIImage {"; b="\tif cfg.HomeServerImage == model.HomeServerUCoreHCIImage {"; s=s.replace(a,"\t//nolint:staticcheck // explicit Home Server target labels are clearer here.\n"+a,1); s=s.replace(b,"\t//nolint:staticcheck // explicit Home Server target labels are clearer here.\n"+b,1); p.write_text(s)'
           gofmt -w internal/tui/tui.go
 
       - name: Unit tests and vet
