@@ -76,6 +76,17 @@ run_expect_fail() {
   [[ "$output" != *"must be stable, testing, or next"* ]]
 }
 
+@test "ISO generator reads binary from file instead of passing base64 via argv" {
+  run grep -F 'python3 - "$IGN_FILE" "$BINARY" "$BINARY_SIZE" "$PASSWD_JSON"' "$SCRIPT"
+  [ "$status" -eq 0 ]
+
+  run grep -F 'with open(binary_path, "rb") as f:' "$SCRIPT"
+  [ "$status" -eq 0 ]
+
+  run grep -F 'BINARY_B64="$(base64 -w0 "$BINARY")"' "$SCRIPT"
+  [ "$status" -ne 0 ]
+}
+
 # ── --ssh-key argument forms ─────────────────────────────────────────────────
 
 @test "--ssh-key value (space-separated) does not trigger unknown-argument error" {
