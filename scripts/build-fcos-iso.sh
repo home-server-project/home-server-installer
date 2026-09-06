@@ -221,7 +221,7 @@ chmod 0755 "$KNUCKLE_ROOT/usr/lib/dracut/hooks/pre-pivot/90-home-server-installe
 rm -f "$KNUCKLE_INITRD"
 (
     cd "$KNUCKLE_ROOT"
-    find . -print0 | cpio --null -o -H newc --quiet | gzip -9 > "$KNUCKLE_INITRD"
+    find . -print0 | cpio --null -o -H newc --quiet --owner=0:0 | gzip -9 > "$KNUCKLE_INITRD"
 )
 echo "  payload initrd: $(du -h "$KNUCKLE_INITRD" | cut -f1)"
 
@@ -245,6 +245,7 @@ IGN_FILE="$BUILD_DIR/live-bootstrap.ign"
 IGN_INITRD="$BUILD_DIR/live-bootstrap.img"
 
 python3 - "$IGN_FILE" "$BINARY_SHA256" "$SSH_PUB_KEY" <<'PYEOF'
+import base64
 import json
 import sys
 
@@ -263,6 +264,10 @@ fi
 restorecon -F /opt/knuckle
 exec /opt/knuckle
 """
+bootstrap_source = (
+    "data:text/plain;charset=utf-8;base64,"
+    + base64.b64encode(bootstrap.encode("utf-8")).decode("ascii")
+)
 
 unit = """\
 [Unit]
@@ -294,7 +299,7 @@ config = {
             {
                 "path": "/opt/home-server-installer-bootstrap",
                 "mode": 0o755,
-                "contents": {"source": "data:," + bootstrap.replace("%", "%25").replace("\n", "%0A").replace("#", "%23").replace(" ", "%20").replace("\"", "%22").replace("$", "%24").replace("{", "%7B").replace("}", "%7D").replace("[", "%5B").replace("]", "%5D").replace("|", "%7C").replace("&", "%26").replace(";", "%3B").replace("=", "%3D").replace("!", "%21").replace("'", "%27").replace("\\", "%5C")}
+                "contents": {"source": bootstrap_source},
             }
         ]
     },
