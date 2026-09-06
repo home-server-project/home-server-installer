@@ -62,3 +62,5 @@ Related projects:
 ## Status
 
 **V1 is development software and is not ready for installation on a real home server.**
+
+The next milestone is a complete disposable-VM installation test of the V1 flow.
