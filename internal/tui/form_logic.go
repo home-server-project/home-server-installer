@@ -128,12 +128,17 @@ func (m *Model) onFormComplete() tea.Cmd {
 
 	case model.StepReview:
 		if !m.Wizard.State.Confirmed {
-			// User said "Go back"
+			// User said "Go back". Home Server skips the generic Sysext/Nvidia/
+			// Tailscale/Update steps, so Previous() lands on the form-based User
+			// step. A newly-created huh form must be initialized before rendering.
 			m.Wizard.Previous()
 			m.err = nil
 			m.cursor = 0
 			m.initStepFields()
 			m.initForm()
+			if m.activeForm != nil {
+				return m.activeForm.Init()
+			}
 			return nil
 		}
 		// Advance to install
