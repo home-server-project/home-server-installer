@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/projectbluefin/knuckle/internal/model"
 )
 
@@ -41,6 +43,32 @@ func TestHomeServerWelcomeRestoresHCISelection(t *testing.T) {
 	m := New(w)
 	if m.cursor != 1 {
 		t.Fatalf("expected HCI cursor 1, got %d", m.cursor)
+	}
+}
+
+func TestHomeServerWelcomeKeyboardSelectsHCI(t *testing.T) {
+	w := newTestWizard()
+	w.State.CurrentStep = model.StepWelcome
+	m := New(w)
+
+	if m.cursor != 0 {
+		t.Fatalf("expected initial Home Server cursor 0, got %d", m.cursor)
+	}
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updated.(*Model)
+	if m.cursor != 1 {
+		t.Fatalf("expected down key to highlight HCI cursor 1, got %d", m.cursor)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(*Model)
+
+	if m.Wizard.State.Config.HomeServerImage != model.HomeServerUCoreHCIImage {
+		t.Fatalf("expected keyboard selection to preserve HCI image, got %q", m.Wizard.State.Config.HomeServerImage)
+	}
+	if m.Wizard.State.CurrentStep != model.StepNetwork {
+		t.Fatalf("expected HCI selection to advance to Network, got %v", m.Wizard.State.CurrentStep)
 	}
 }
 
