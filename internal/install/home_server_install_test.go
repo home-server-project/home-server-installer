@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -36,7 +37,7 @@ func testHomeServerConfig(bootMiB int) *model.InstallConfig {
 
 func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T) {
 	for _, bootMiB := range []int{model.HomeServerBootStandardMiB, model.HomeServerBootLargeMiB} {
-		t.Run(strings.TrimSpace(string(rune(bootMiB))), func(t *testing.T) {
+		t.Run(strconv.Itoa(bootMiB), func(t *testing.T) {
 			spy := runner.NewSpyRunner()
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 			installer := NewHomeServerInstaller(spy, logger)
@@ -56,13 +57,7 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 			if !strings.Contains(joinedArgs, cfg.Disk.DevPath) || !strings.Contains(joinedArgs, cfg.HomeServerImage) {
 				t.Fatalf("direct install args missing disk/image: %s", joinedArgs)
 			}
-			if !strings.Contains(joinedArgs, strings.TrimSpace(strings.ReplaceAll(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(joinedArgs), "")), "", ""))) {
-				// Keep this test focused on the explicit numeric preset below.
-			}
-			wantBoot := "1024"
-			if bootMiB == model.HomeServerBootLargeMiB {
-				wantBoot = "2048"
-			}
+			wantBoot := strconv.Itoa(bootMiB)
 			if !strings.Contains(joinedArgs, " "+wantBoot+" ") {
 				t.Fatalf("args missing selected /boot size %s: %s", wantBoot, joinedArgs)
 			}
