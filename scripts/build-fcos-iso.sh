@@ -2,14 +2,15 @@
 # Build a self-contained UEFI Fedora CoreOS live ISO containing Knuckle.
 #
 # The stock FCOS ISO reserves only 256 KiB for embedded live-Ignition data, so
-# the Knuckle executable must not be stored there.  This builder instead:
+# the Knuckle executable must not be stored there. This builder instead:
 #   1. downloads + verifies the official FCOS live ISO with coreos-installer
 #   2. extracts the official PXE kernel/initramfs/rootfs from that verified ISO
 #   3. creates a separate initrd containing Knuckle plus a dracut pre-pivot hook
 #   4. keeps live Ignition small (bootstrap service + optional SSH key only)
-#   5. assembles a UEFI-only systemd-boot ISO that loads all initrds in order
+#   5. concatenates FCOS initramfs + rootfs + Knuckle + Ignition into one initrd
+#   6. assembles a UEFI-only systemd-boot ISO that loads that single initrd
 #
-# The pre-pivot hook copies Knuckle into the writable live root.  The small
+# The pre-pivot hook copies Knuckle into the writable live root. The small
 # Ignition-created bootstrap service restores its SELinux label, verifies its
 # SHA256, and then launches the TUI on tty1.
 #
@@ -175,8 +176,8 @@ echo "  rootfs    : $(du -h "$FCOS_ROOTFS" | cut -f1)"
 
 # ── 4. Build the separate Knuckle initrd ─────────────────────────────────────
 # The executable lives in its own initrd, outside the tiny ISO Ignition embed
-# area.  A dracut pre-pivot hook copies it into the writable live root before
-# switch_root.  SELinux labeling is finalized by the Ignition-created bootstrap
+# area. A dracut pre-pivot hook copies it into the writable live root before
+# switch_root. SELinux labeling is finalized by the Ignition-created bootstrap
 # service after the pivot and before execution.
 echo "[4/7] Building separate Knuckle initrd payload..."
 KNUCKLE_ROOT="$BUILD_DIR/knuckle-initrd-root"
@@ -191,7 +192,7 @@ chmod 0755 "$KNUCKLE_ROOT/opt/home-server-installer/knuckle"
 
 cat > "$KNUCKLE_ROOT/usr/lib/dracut/hooks/pre-pivot/90-home-server-installer.sh" <<'HOOK'
 #!/bin/sh
-# This file is sourced by dracut.  Use return, not exit.
+# This file is sourced by dracut. Use return, not exit.
 _home_server_root="${NEWROOT:-/sysroot}"
 _home_server_src="/opt/home-server-installer/knuckle"
 _home_server_dst="${_home_server_root}/opt/knuckle"
@@ -236,7 +237,7 @@ rm -rf "$VERIFY_DIR"
 trap - EXIT
 
 # ── 5. Generate a SMALL live Ignition bootstrap ──────────────────────────────
-# Ignition carries only configuration: no executable payload.  It creates the
+# Ignition carries only configuration: no executable payload. It creates the
 # launcher with the correct FCOS SELinux labeling, enables sshd, and optionally
 # adds the supplied SSH public key.
 echo "[5/7] Generating small live Ignition bootstrap..."
@@ -322,7 +323,25 @@ coreos-installer pxe ignition wrap -i "$IGN_FILE" -o "$IGN_INITRD"
 echo "  Ignition JSON : ${IGN_SIZE} bytes"
 echo "  Ignition initrd: $(du -h "$IGN_INITRD" | cut -f1)"
 
-# ── 6. Build a UEFI ESP that loads all FCOS initrds ──────────────────────────
+# FCOS supports an initramfs+rootfs combined initrd. Keep the Home Server
+# additions after the stock FCOS payload, preserving this exact order:
+#   FCOS initramfs -> FCOS rootfs -> Knuckle -> Ignition
+COMBINED_INITRD="$BUILD_DIR/home-server-initrd-${BINARY_SHA256:0:16}.img"
+cat "$FCOS_INITRAMFS" "$FCOS_ROOTFS" "$KNUCKLE_INITRD" "$IGN_INITRD" > "$COMBINED_INITRD"
+
+EXPECTED_COMBINED_SIZE=$(( \
+    $(stat -c%s "$FCOS_INITRAMFS") + \
+    $(stat -c%s "$FCOS_ROOTFS") + \
+    $(stat -c%s "$KNUCKLE_INITRD") + \
+    $(stat -c%s "$IGN_INITRD") ))
+ACTUAL_COMBINED_SIZE="$(stat -c%s "$COMBINED_INITRD")"
+if (( ACTUAL_COMBINED_SIZE != EXPECTED_COMBINED_SIZE )); then
+    echo "error: combined initrd size mismatch: ${ACTUAL_COMBINED_SIZE} != ${EXPECTED_COMBINED_SIZE}" >&2
+    exit 1
+fi
+echo "  combined initrd: $(du -h "$COMBINED_INITRD" | cut -f1)"
+
+# ── 6. Build a UEFI ESP that loads one combined FCOS initrd ──────────────────
 echo "[6/7] Building UEFI System Partition..."
 ISO_DIR="$BUILD_DIR/iso-root"
 EFI_IMG="$BUILD_DIR/efi.img"
@@ -331,10 +350,7 @@ mkdir -p "$ISO_DIR"
 
 TOTAL_BYTES=$(( \
     $(stat -c%s "$KERNEL") + \
-    $(stat -c%s "$FCOS_INITRAMFS") + \
-    $(stat -c%s "$FCOS_ROOTFS") + \
-    $(stat -c%s "$KNUCKLE_INITRD") + \
-    $(stat -c%s "$IGN_INITRD") + \
+    $(stat -c%s "$COMBINED_INITRD") + \
     64 * 1024 * 1024 ))
 ESP_SIZE_MB=$(( (TOTAL_BYTES + 1024 * 1024 - 1) / 1024 / 1024 ))
 
@@ -347,14 +363,11 @@ printf 'default home-server-installer\ntimeout 5\neditor no\n' \
     | mcopy -i "$EFI_IMG" - ::/loader/loader.conf
 
 # Primary interactive entry: tty0 is last, so the TUI is attached to the VGA
-# console.  Kernel/systemd diagnostics are still mirrored to ttyS0.
+# console. Kernel/systemd diagnostics are still mirrored to ttyS0.
 cat > "$BUILD_DIR/home-server-installer.conf" <<'ENTRY'
 title   Home Server Installer - Fedora CoreOS
 linux   /vmlinuz
-initrd  /fcos-initramfs.img
-initrd  /fcos-rootfs.img
-initrd  /knuckle.img
-initrd  /ignition.img
+initrd  /home-server-initrd.img
 options ignition.firstboot ignition.platform.id=metal console=ttyS0,115200n8 console=tty0
 ENTRY
 mcopy -i "$EFI_IMG" "$BUILD_DIR/home-server-installer.conf" ::/loader/entries/home-server-installer.conf
@@ -363,32 +376,26 @@ mcopy -i "$EFI_IMG" "$BUILD_DIR/home-server-installer.conf" ::/loader/entries/ho
 cat > "$BUILD_DIR/home-server-installer-serial.conf" <<'ENTRY'
 title   Home Server Installer - Fedora CoreOS (serial)
 linux   /vmlinuz
-initrd  /fcos-initramfs.img
-initrd  /fcos-rootfs.img
-initrd  /knuckle.img
-initrd  /ignition.img
+initrd  /home-server-initrd.img
 options ignition.firstboot ignition.platform.id=metal console=ttyS0,115200n8
 ENTRY
 mcopy -i "$EFI_IMG" "$BUILD_DIR/home-server-installer-serial.conf" ::/loader/entries/home-server-installer-serial.conf
 
-mcopy -i "$EFI_IMG" "$KERNEL"         ::/vmlinuz
-mcopy -i "$EFI_IMG" "$FCOS_INITRAMFS" ::/fcos-initramfs.img
-mcopy -i "$EFI_IMG" "$FCOS_ROOTFS"    ::/fcos-rootfs.img
-mcopy -i "$EFI_IMG" "$KNUCKLE_INITRD" ::/knuckle.img
-mcopy -i "$EFI_IMG" "$IGN_INITRD"      ::/ignition.img
+mcopy -i "$EFI_IMG" "$KERNEL"          ::/vmlinuz
+mcopy -i "$EFI_IMG" "$COMBINED_INITRD" ::/home-server-initrd.img
 
-# Verify the UEFI boot entry really references the separate payloads.
+# Verify the UEFI boot entry has exactly one initrd and points at the combined
+# payload, avoiding the multi-initrd boot path that failed in the VM.
 ENTRY_TEXT="$(mtype -i "$EFI_IMG" ::/loader/entries/home-server-installer.conf)"
-for expected in \
-    'initrd  /fcos-initramfs.img' \
-    'initrd  /fcos-rootfs.img' \
-    'initrd  /knuckle.img' \
-    'initrd  /ignition.img'; do
-    grep -Fq "$expected" <<<"$ENTRY_TEXT" || {
-        echo "error: UEFI loader entry missing: $expected" >&2
-        exit 1
-    }
-done
+INITRD_COUNT="$(grep -c '^initrd[[:space:]]' <<<"$ENTRY_TEXT")"
+if [[ "$INITRD_COUNT" -ne 1 ]]; then
+    echo "error: UEFI loader entry must contain exactly one initrd line (got $INITRD_COUNT)" >&2
+    exit 1
+fi
+grep -Fq 'initrd  /home-server-initrd.img' <<<"$ENTRY_TEXT" || {
+    echo "error: UEFI loader entry missing combined initrd" >&2
+    exit 1
+}
 
 echo "  ESP: $(du -h "$EFI_IMG" | cut -f1)"
 
@@ -413,6 +420,7 @@ echo "ISO built: $ISO_OUT ($(du -h "$ISO_OUT" | cut -f1))"
 echo "  FCOS source : $ISO_BASENAME"
 echo "  Knuckle SHA : $BINARY_SHA256"
 echo "  live Ignition: ${IGN_SIZE} bytes (binary is NOT embedded there)"
+echo "  boot initrd : one combined FCOS+Knuckle+Ignition payload"
 echo ""
 if [[ "$ARCH" == "arm64" ]]; then
     echo "Test with QEMU (UEFI, arm64):"
