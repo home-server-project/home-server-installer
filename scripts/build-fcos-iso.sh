@@ -130,9 +130,6 @@ fi
 echo "[3/4] Generating live Ignition config..."
 
 IGN_FILE="$BUILD_DIR/live-ignition.ign"
-
-# Encode the binary as a base64 data URL for the Ignition storage.files entry.
-BINARY_B64="$(base64 -w0 "$BINARY")"
 BINARY_SIZE="$(stat -c%s "$BINARY")"
 
 # Build passwd section if an SSH key was provided
@@ -142,16 +139,23 @@ if [[ -n "$SSH_PUB_KEY" ]]; then
     PASSWD_JSON="${PASSWD_JSON}]}"
 fi
 
-# Write the Ignition 3.3.0 JSON.
+# Write the Ignition 3.3.0 JSON. Python reads the binary directly instead of
+# receiving its base64 representation through argv, which would exceed ARG_MAX
+# for normal knuckle binary sizes.
 # The service unit includes Conflicts=getty@tty1.service because FCOS live
 # images autologin the "core" user on tty1 by default.
-python3 - "$IGN_FILE" "$BINARY_B64" "$BINARY_SIZE" "$PASSWD_JSON" <<'PYEOF'
-import json, sys, os
+python3 - "$IGN_FILE" "$BINARY" "$BINARY_SIZE" "$PASSWD_JSON" <<'PYEOF'
+import base64
+import json
+import sys
 
-ign_file   = sys.argv[1]
-binary_b64 = sys.argv[2]
+ign_file = sys.argv[1]
+binary_path = sys.argv[2]
 binary_size = int(sys.argv[3])
-passwd_raw  = sys.argv[4]
+passwd_raw = sys.argv[4]
+
+with open(binary_path, "rb") as f:
+    binary_b64 = base64.b64encode(f.read()).decode("ascii")
 
 service_unit = """\
 [Unit]
@@ -174,8 +178,6 @@ RestartSec=2
 
 [Install]
 WantedBy=multi-user.target"""
-
-enabled = True
 
 config = {
     "ignition": {"version": "3.3.0"},
@@ -229,10 +231,10 @@ echo "ISO built: $ISO_OUT ($(du -h "$ISO_OUT" | cut -f1))"
 echo ""
 echo "Test with QEMU (UEFI, amd64):"
 echo "  OVMF=/usr/share/OVMF/OVMF_CODE.fd"
-echo "  qemu-system-x86_64 -m 4096 -enable-kvm \\"
-echo "    -drive if=pflash,format=raw,readonly=on,file=\$OVMF \\"
-echo "    -cdrom $ISO_OUT \\"
-echo "    -drive if=virtio,file=target.qcow2,format=qcow2 \\"
+echo "  qemu-system-x86_64 -m 4096 -enable-kvm \\" 
+echo "    -drive if=pflash,format=raw,readonly=on,file=\$OVMF \\" 
+echo "    -cdrom $ISO_OUT \\" 
+echo "    -drive if=virtio,file=target.qcow2,format=qcow2 \\" 
 echo "    -nographic"
 echo ""
 echo "Write to USB:"
