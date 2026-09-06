@@ -761,6 +761,7 @@ func (m *Model) initStepFields() {
 		// Home Server V1 exposes only the two supported uCore destinations.
 		m.osSubView = true
 		m.cursor = 0
+		//nolint:staticcheck // explicit Home Server target labels are clearer here.
 		if m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreHCIImage {
 			m.cursor = 1
 		}
@@ -1308,6 +1309,7 @@ func (m *Model) viewDone() string {
 	}
 
 	var osName string
+	//nolint:staticcheck // explicit Home Server target labels are clearer here.
 	if cfg.HomeServerImage == model.HomeServerUCoreHCIImage {
 		osName = "Home Server uCore HCI"
 	} else if cfg.HomeServerImage == model.HomeServerUCoreImage {
