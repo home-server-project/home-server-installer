@@ -38,16 +38,6 @@ jobs:
           go test ./...
           go vet ./...
 
-      - name: Diagnose TUI coverage
-        shell: bash
-        run: |
-          set -euo pipefail
-          go test -count=1 -coverprofile=/tmp/tui.cover ./internal/tui
-          echo "--- TUI functions below 100% ---"
-          go tool cover -func=/tmp/tui.cover | awk '$3 != "100.0%" {print}'
-          echo "--- uncovered statement blocks ---"
-          awk '$3 == 0 {print}' /tmp/tui.cover
-
       - name: Coverage gates
         run: just cover-check
 
