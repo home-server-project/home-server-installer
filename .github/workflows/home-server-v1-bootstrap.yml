@@ -1,0 +1,552 @@
+name: Home Server V1 bootstrap
+
+on:
+  push:
+    paths:
+      - .github/workflows/home-server-v1-bootstrap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: "1.26.6"
+          check-latest: true
+
+      - name: Apply Home Server V1 changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:80]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          readme = r'''# Home Server Installer
+
+> [!WARNING]
+> **In development. Destructive installer. Use only in disposable VMs/test hardware for now.**
+
+Home Server Installer is a friendly Fedora CoreOS-based installer for [Home Server uCore](https://github.com/home-server-project/home-server-ucore).
+
+It is a thin downstream adaptation of [Project Bluefin Knuckle](https://github.com/projectbluefin/knuckle). The goal is to keep Knuckle's proven TUI, hardware discovery and Fedora CoreOS installer backend, while adding the Home Server-specific image selection and first-boot uCore transition.
+
+## V1 targets
+
+- `ghcr.io/home-server-project/home-server-ucore:lts`
+- `ghcr.io/home-server-project/home-server-ucore-hci:lts`
+
+Upstream uCore image choices can be added later without redesigning the installer.
+
+## V1 flow
+
+```text
+Fedora CoreOS live ISO + Home Server Installer
+                 |
+                 v
+      choose uCore / uCore HCI
+      network / disk / user / SSH
+                 |
+                 v
+        coreos-installer installs FCOS
+                 |
+                 v
+  first boot verifies the Home Server signature
+  and rebases directly to the selected signed image
+                 |
+                 v
+               reboot
+                 |
+                 v
+          Home Server uCore
+```
+
+The Home Server path intentionally keeps the temporary Fedora CoreOS configuration minimal. Generic Knuckle Flatcar/FCOS functionality remains in the codebase so upstream changes can continue to be merged, but it is not exposed as the primary Home Server V1 flow.
+
+## Known V1 limitation: disk layout
+
+V1 deliberately uses the standard Fedora CoreOS disk layout so the new installer/rebase mechanics can be proven first.
+
+The stock FCOS `/boot` size is not the final Home Server design. A later milestone will add a larger `/boot` option (1 GiB / 2 GiB) required for the Home Server/uCore update workflow.
+
+## Builder
+
+The future Builder template will create the personalized installer ISO and can add small per-user settings such as an SSH public key. Private SSH keys never belong in an ISO.
+
+## Upstream
+
+This repository is derived from [Project Bluefin Knuckle](https://github.com/projectbluefin/knuckle) and retains the upstream Apache-2.0 license and project history.
+
+Related projects:
+
+- [Home Server uCore](https://github.com/home-server-project/home-server-ucore)
+- [Universal Blue uCore](https://github.com/ublue-os/ucore)
+- [Fedora CoreOS](https://fedoraproject.org/coreos/)
+
+## Status
+
+**V1 is development software and is not ready for installation on a real home server.**
+'''
+          Path("README.md").write_text(readme)
+
+          replace_once(
+              "internal/model/model.go",
+              '''const (\n\tOSFlatcar    = "flatcar"\n\tOSFCOS       = "fcos"\n\tOSBluefinDDI = "bluefin-ddi"\n)\n''',
+              '''const (\n\tOSFlatcar    = "flatcar"\n\tOSFCOS       = "fcos"\n\tOSBluefinDDI = "bluefin-ddi"\n)\n\n// Home Server V1 destination images. The installer first lays down Fedora\n// CoreOS, then a one-shot service rebases directly to the selected signed image.\nconst (\n\tHomeServerUCoreImage    = "ghcr.io/home-server-project/home-server-ucore:lts"\n\tHomeServerUCoreHCIImage = "ghcr.io/home-server-project/home-server-ucore-hci:lts"\n)\n''')
+
+          replace_once(
+              "internal/model/model.go",
+              '''type InstallConfig struct {\n\tOS                  string // "flatcar" | "fcos"; defaults to "flatcar" for backward compatibility\n\tArch                string // amd64 or arm64 (determined at ISO build time; default "amd64")\n''',
+              '''type InstallConfig struct {\n\tOS                  string // "flatcar" | "fcos"; defaults to "flatcar" for backward compatibility\n\tHomeServerImage     string // selected signed Home Server uCore destination; empty for generic Knuckle flows\n\tArch                string // amd64 or arm64 (determined at ISO build time; default "amd64")\n''')
+
+          replace_once(
+              "internal/wizard/wizard.go",
+              '''\t\t// BluefinDDI skips Sysext, Nvidia, Tailscale, and Update steps —\n\t\t// those are all Flatcar/FCOS-only concerns.\n\t\tif w.isBluefinDDI() {\n''',
+              '''\t\t// BluefinDDI and the Home Server profile skip generic Sysext, Nvidia,\n\t\t// Tailscale, and FCOS update-policy steps. Home Server only uses FCOS as\n\t\t// the bootstrap OS before rebasing to uCore.\n\t\tif w.isMinimalInstallTarget() {\n''')
+
+          replace_once(
+              "internal/wizard/wizard.go",
+              '''\t\t// BluefinDDI: skip back over Sysext/Nvidia/Tailscale/Update.\n\t\tif w.isBluefinDDI() {\n''',
+              '''\t\t// BluefinDDI/Home Server: skip back over Sysext/Nvidia/Tailscale/Update.\n\t\tif w.isMinimalInstallTarget() {\n''')
+
+          replace_once(
+              "internal/wizard/wizard.go",
+              '''func (w *Wizard) isBluefinDDI() bool {\n\treturn w.State.Config.OS == model.OSBluefinDDI\n}\n''',
+              '''func (w *Wizard) isBluefinDDI() bool {\n\treturn w.State.Config.OS == model.OSBluefinDDI\n}\n\nfunc (w *Wizard) isHomeServerInstall() bool {\n\treturn w.State.Config.HomeServerImage != ""\n}\n\nfunc (w *Wizard) isMinimalInstallTarget() bool {\n\treturn w.isBluefinDDI() || w.isHomeServerInstall()\n}\n''')
+
+          replace_once(
+              "internal/ignition/ignition.go",
+              '''func (g *Generator) GenerateFCOSButane(cfg *model.InstallConfig) (string, error) {\n\tif cfg == nil {\n\t\treturn "", fmt.Errorf("config cannot be nil")\n\t}\n\n''',
+              '''func (g *Generator) GenerateFCOSButane(cfg *model.InstallConfig) (string, error) {\n\tif cfg == nil {\n\t\treturn "", fmt.Errorf("config cannot be nil")\n\t}\n\n\tif cfg.HomeServerImage != "" {\n\t\treturn g.GenerateHomeServerFCOSButane(cfg)\n\t}\n\n''')
+
+          home_server_go = r'''package ignition
+
+import (
+    "fmt"
+
+    "github.com/projectbluefin/knuckle/internal/model"
+)
+
+const homeServerPublicKeyPath = "/etc/containers/home-server-project.pub"
+
+const homeServerPublicKey = `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWU3SeANKBm2Dql6FGZYNu2Bd7nZf
+wSS/hmdv0B25JOSqi0dbyvW8XAJHJ4UOl/GeOSQM4XuDey9yI9I09r9XWw==
+-----END PUBLIC KEY-----`
+
+// GenerateHomeServerFCOSButane creates the intentionally small bootstrap
+// configuration used by Home Server Installer V1. Fedora CoreOS is only an
+// installation trampoline: user/network identity is provisioned, the Home
+// Server signing key/policy is installed, and first boot performs a signed
+// rpm-ostree rebase to uCore.
+func (g *Generator) GenerateHomeServerFCOSButane(cfg *model.InstallConfig) (string, error) {
+    if cfg == nil {
+        return "", fmt.Errorf("config cannot be nil")
+    }
+    if !isHomeServerImage(cfg.HomeServerImage) {
+        return "", fmt.Errorf("unsupported Home Server image %q", cfg.HomeServerImage)
+    }
+
+    // Do not let generic temporary-FCOS policy leak into the final uCore
+    // deployment. V1 keeps only identity/network/authentication/timezone.
+    minimal := *cfg
+    minimal.Sysexts = nil
+    minimal.Swap = model.SwapConfig{}
+    minimal.Tailscale = model.TailscaleConfig{}
+    minimal.UpdateStrategy = model.UpdateStrategy{}
+    minimal.NvidiaDriverVersion = ""
+
+    b := NewBuilder(&minimal)
+    if err := addSharedFragments(b, &minimal); err != nil {
+        return "", err
+    }
+
+    keyFrag, err := renderTemplate("home-server-key", homeServerKeyTemplate, struct{ Key string }{Key: homeServerPublicKey})
+    if err != nil {
+        return "", fmt.Errorf("rendering Home Server signing key: %w", err)
+    }
+    b.AddStorageFile(keyFrag)
+
+    policyFrag, err := renderTemplate("home-server-policy", homeServerPolicyTemplate, struct{ KeyPath string }{KeyPath: homeServerPublicKeyPath})
+    if err != nil {
+        return "", fmt.Errorf("rendering Home Server signature policy: %w", err)
+    }
+    b.AddStorageFile(policyFrag)
+
+    serviceFrag, err := renderTemplate("home-server-autorebase", homeServerAutorebaseTemplate, struct{ Image string }{Image: cfg.HomeServerImage})
+    if err != nil {
+        return "", fmt.Errorf("rendering Home Server autorebase service: %w", err)
+    }
+
+    // Zincati belongs to the temporary FCOS deployment, not the final Home
+    // Server update policy. Mask it so it cannot race the one-shot rebase.
+    b.AddSystemdUnit("- name: zincati.service\n  mask: true")
+    b.AddSystemdUnit(serviceFrag)
+
+    return b.BuildFCOS(), nil
+}
+
+func isHomeServerImage(image string) bool {
+    switch image {
+    case model.HomeServerUCoreImage, model.HomeServerUCoreHCIImage:
+        return true
+    default:
+        return false
+    }
+}
+
+var homeServerKeyTemplate = `- path: /etc/containers/home-server-project.pub
+  mode: 0644
+  overwrite: true
+  contents:
+    inline: |
+{{.Key | indentBlock 6}}`
+
+var homeServerPolicyTemplate = `- path: /etc/containers/policy.json
+  mode: 0644
+  overwrite: true
+  contents:
+    inline: |
+      {
+        "default": [{"type": "insecureAcceptAnything"}],
+        "transports": {
+          "docker": {
+            "ghcr.io/home-server-project/home-server-ucore": [{
+              "type": "sigstoreSigned",
+              "keyPath": "{{.KeyPath}}",
+              "signedIdentity": {"type": "matchRepository"}
+            }],
+            "ghcr.io/home-server-project/home-server-ucore-hci": [{
+              "type": "sigstoreSigned",
+              "keyPath": "{{.KeyPath}}",
+              "signedIdentity": {"type": "matchRepository"}
+            }]
+          }
+        }
+      }`
+
+var homeServerAutorebaseTemplate = `- name: home-server-autorebase.service
+  enabled: true
+  contents: |
+    [Unit]
+    Description=Home Server signed uCore auto-rebase
+    ConditionPathExists=!/etc/home-server-autorebase.done
+    After=network-online.target
+    Wants=network-online.target
+
+    [Service]
+    Type=oneshot
+    StandardOutput=journal+console
+    ExecStart=/usr/bin/rpm-ostree rebase --bypass-driver ostree-image-signed:docker://{{.Image}}
+    ExecStart=/usr/bin/touch /etc/home-server-autorebase.done
+    ExecStart=/usr/bin/systemctl disable home-server-autorebase.service
+    ExecStart=/usr/bin/systemctl reboot
+
+    [Install]
+    WantedBy=multi-user.target`
+'''
+          Path("internal/ignition/home_server.go").write_text(home_server_go)
+
+          # Add one small template helper for multiline PEM indentation.
+          replace_once(
+              "internal/ignition/builder.go",
+              '''var builderFuncMap = template.FuncMap{\n\t"yamlEscape": func(s string) string {\n''',
+              '''var builderFuncMap = template.FuncMap{\n\t"indentBlock": func(spaces int, s string) string {\n\t\tpad := strings.Repeat(" ", spaces)\n\t\treturn pad + strings.ReplaceAll(s, "\\n", "\\n"+pad)\n\t},\n\t"yamlEscape": func(s string) string {\n''')
+
+          replace_once(
+              "internal/tui/tui.go",
+              '''\tcase model.StepWelcome:\n\t\tif m.osSubView {\n\t\t\treturn 3 // Flatcar | FCOS | Bluefin Server\n\t\t}\n''',
+              '''\tcase model.StepWelcome:\n\t\tif m.osSubView {\n\t\t\treturn 2 // Home Server uCore | Home Server uCore HCI\n\t\t}\n''')
+
+          old_welcome = '''\tcase model.StepWelcome:\n\t\tif m.osSubView {\n\t\t\t// OS picker — cursor 0 = Flatcar, cursor 1 = FCOS, cursor 2 = Bluefin Server\n\t\t\tosList := []string{model.OSFlatcar, model.OSFCOS, model.OSBluefinDDI}\n\t\t\tif m.cursor >= 0 && m.cursor < len(osList) {\n\t\t\t\tm.Wizard.State.Config.OS = osList[m.cursor]\n\t\t\t}\n\t\t\t// BluefinDDI has no channel — skip straight to Storage.\n\t\t\tif m.Wizard.State.Config.OS == model.OSBluefinDDI {\n\t\t\t\tm.Wizard.GoToStep(model.StepStorage)\n\t\t\t\tm.err = nil\n\t\t\t\tm.cursor = 0\n\t\t\t\tm.initStepFields()\n\t\t\t\tm.initForm()\n\t\t\t\treturn m, nil\n\t\t\t}\n\t\t\tm.osSubView = false\n\t\t\tm.cursor = 0\n\t\t\treturn m, nil\n\t\t}\n'''
+          new_welcome = '''\tcase model.StepWelcome:\n\t\tif m.osSubView {\n\t\t\timages := []string{model.HomeServerUCoreImage, model.HomeServerUCoreHCIImage}\n\t\t\tif m.cursor < 0 || m.cursor >= len(images) {\n\t\t\t\tm.cursor = 0\n\t\t\t}\n\t\t\tcfg := &m.Wizard.State.Config\n\t\t\tcfg.OS = model.OSFCOS\n\t\t\tcfg.Channel = "stable"\n\t\t\tcfg.HomeServerImage = images[m.cursor]\n\t\t\t// FCOS is a short-lived bootstrap in the Home Server path. Generic\n\t\t\t// sysext/swap/Tailscale/update-policy choices are deliberately skipped.\n\t\t\tcfg.Sysexts = nil\n\t\t\tcfg.Swap = model.SwapConfig{}\n\t\t\tcfg.Tailscale = model.TailscaleConfig{}\n\t\t\tcfg.UpdateStrategy = model.UpdateStrategy{}\n\t\t\tcfg.NvidiaDriverVersion = ""\n\t\t\tm.osSubView = false\n\t\t\t// Fall through to Wizard.Next(): Welcome -> Network.\n\t\t} else {\n'''
+          # The generic channel picker remains available in code for upstream compatibility.
+          new_welcome += '''\t\t\t// Apply channel/stream selection from card cursor\n\t\t\tchannels := m.channelList()\n\t\t\tif m.cursor >= 0 && m.cursor < len(channels) {\n\t\t\t\tm.Wizard.State.Config.Channel = channels[m.cursor]\n\t\t\t}\n\t\t\t// If IgnitionURL is set, skip directly to Storage\n\t\t\tif m.Wizard.State.Config.IgnitionURL != "" {\n\t\t\t\tm.Wizard.GoToStep(model.StepStorage)\n\t\t\t\tm.err = nil\n\t\t\t\tm.cursor = 0\n\t\t\t\tm.initStepFields()\n\t\t\t\tm.initForm()\n\t\t\t\treturn m, nil\n\t\t\t}\n\t\t}\n'''
+          p = Path("internal/tui/tui.go")
+          text = p.read_text()
+          start = text.find(old_welcome)
+          if start < 0:
+              raise SystemExit("internal/tui/tui.go: StepWelcome OS block not found")
+          tail = '''\t\t// Apply channel/stream selection from card cursor\n\t\tchannels := m.channelList()\n\t\tif m.cursor >= 0 && m.cursor < len(channels) {\n\t\t\tm.Wizard.State.Config.Channel = channels[m.cursor]\n\t\t}\n\t\t// If IgnitionURL is set, skip directly to Storage\n\t\tif m.Wizard.State.Config.IgnitionURL != "" {\n\t\t\tm.Wizard.GoToStep(model.StepStorage)\n\t\t\tm.err = nil\n\t\t\tm.cursor = 0\n\t\t\tm.initStepFields()\n\t\t\tm.initForm()\n\t\t\treturn m, nil\n\t\t}\n'''
+          whole_old = old_welcome + tail
+          if whole_old not in text:
+              raise SystemExit("internal/tui/tui.go: complete StepWelcome block not found")
+          p.write_text(text.replace(whole_old, new_welcome, 1))
+
+          replace_once(
+              "internal/tui/tui.go",
+              '''\tcase model.StepWelcome:\n\t\t// Show OS picker first; channel cards follow after OS selection.\n\t\tm.osSubView = true\n\t\tm.cursor = 0\n\t\tm.fields = nil\n''',
+              '''\tcase model.StepWelcome:\n\t\t// Home Server V1 exposes only the two supported uCore destinations.\n\t\tm.osSubView = true\n\t\tm.cursor = 0\n\t\tif m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreHCIImage {\n\t\t\tm.cursor = 1\n\t\t}\n\t\tm.fields = nil\n''')
+
+          replace_once(
+              "internal/tui/tui.go",
+              '''\tvar osName string\n\tswitch m.Wizard.State.Config.OS {\n\tcase model.OSFCOS:\n\t\tosName = "Fedora CoreOS"\n''',
+              '''\tvar osName string\n\tif m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreHCIImage {\n\t\tosName = "Home Server uCore HCI"\n\t} else if m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreImage {\n\t\tosName = "Home Server uCore"\n\t} else {\n\t\tswitch m.Wizard.State.Config.OS {\n\t\tcase model.OSFCOS:\n\t\t\tosName = "Fedora CoreOS"\n''')
+          replace_once(
+              "internal/tui/tui.go",
+              '''\tcase model.OSBluefinDDI:\n\t\tosName = "Bluefin Server"\n\tdefault:\n\t\tosName = "Flatcar Container Linux"\n\t}\n\tfmt.Fprintf(&b, "Installing %s...\\n\\n", osName)\n''',
+              '''\t\tcase model.OSBluefinDDI:\n\t\t\tosName = "Bluefin Server"\n\t\tdefault:\n\t\t\tosName = "Flatcar Container Linux"\n\t\t}\n\t}\n\tfmt.Fprintf(&b, "Installing %s...\\n\\n", osName)\n''')
+
+          # Patch the second osName block in viewDone separately.
+          old_done = '''\tvar osName string\n\tswitch cfg.OS {\n\tcase model.OSFCOS:\n\t\tosName = "Fedora CoreOS"\n\tcase model.OSBluefinDDI:\n\t\tosName = "Bluefin Server"\n\tdefault:\n\t\tosName = "Flatcar Container Linux"\n\t}\n'''
+          new_done = '''\tvar osName string\n\tif cfg.HomeServerImage == model.HomeServerUCoreHCIImage {\n\t\tosName = "Home Server uCore HCI"\n\t} else if cfg.HomeServerImage == model.HomeServerUCoreImage {\n\t\tosName = "Home Server uCore"\n\t} else {\n\t\tswitch cfg.OS {\n\t\tcase model.OSFCOS:\n\t\t\tosName = "Fedora CoreOS"\n\t\tcase model.OSBluefinDDI:\n\t\t\tosName = "Bluefin Server"\n\t\tdefault:\n\t\t\tosName = "Flatcar Container Linux"\n\t\t}\n\t}\n'''
+          replace_once("internal/tui/tui.go", old_done, new_done)
+
+          replace_once(
+              "internal/tui/form_logic.go",
+              '''\t\tif m.Wizard.State.Config.Hostname == "" {\n\t\t\tif m.Wizard.State.Config.OS == model.OSFCOS {\n\t\t\t\tm.Wizard.State.Config.Hostname = "fcos"\n''',
+              '''\t\tif m.Wizard.State.Config.Hostname == "" {\n\t\t\tif m.Wizard.State.Config.HomeServerImage != "" {\n\t\t\t\tm.Wizard.State.Config.Hostname = "homeserver"\n\t\t\t} else if m.Wizard.State.Config.OS == model.OSFCOS {\n\t\t\t\tm.Wizard.State.Config.Hostname = "fcos"\n''')
+
+          replace_once(
+              "internal/tui/forms.go",
+              '''\tcfg := &m.Wizard.State.Config\n\ttitle := "⚠️  DESTRUCTIVE OPERATION — Install Flatcar to disk?"\n\tif cfg.OS == model.OSFCOS {\n\t\ttitle = "⚠️  DESTRUCTIVE OPERATION — Install Fedora CoreOS to disk?"\n\t}\n''',
+              '''\tcfg := &m.Wizard.State.Config\n\ttitle := "⚠️  DESTRUCTIVE OPERATION — Install Flatcar to disk?"\n\tif cfg.HomeServerImage == model.HomeServerUCoreHCIImage {\n\t\ttitle = "⚠️  DESTRUCTIVE OPERATION — Install Home Server uCore HCI to disk?"\n\t} else if cfg.HomeServerImage == model.HomeServerUCoreImage {\n\t\ttitle = "⚠️  DESTRUCTIVE OPERATION — Install Home Server uCore to disk?"\n\t} else if cfg.OS == model.OSFCOS {\n\t\ttitle = "⚠️  DESTRUCTIVE OPERATION — Install Fedora CoreOS to disk?"\n\t}\n''')
+
+          replace_once(
+              "internal/tui/forms.go",
+              '''\tif cfg.OS != "" {\n\t\tfmt.Fprintf(&b, "  OS: %s\\n", cfg.OS)\n\t}\n''',
+              '''\tif cfg.HomeServerImage != "" {\n\t\tfmt.Fprintf(&b, "  Destination: %s\\n", cfg.HomeServerImage)\n\t} else if cfg.OS != "" {\n\t\tfmt.Fprintf(&b, "  OS: %s\\n", cfg.OS)\n\t}\n''')
+
+          # Light branding only: preserve Knuckle identity/upstream history.
+          replace_once("internal/tui/forms.go", 'presentsStyle.Render("  Project Bluefin presents...")', 'presentsStyle.Render("  Home Server Project · powered by Project Bluefin Knuckle")')
+          replace_once("internal/tui/forms.go", 'accentColor.Render("homelab ignition configurator")', 'accentColor.Render("Home Server uCore installer")')
+
+          p = Path("internal/tui/forms.go")
+          text = p.read_text()
+          start_marker = '\tb.WriteString("  Select an operating system:\\n\\n")\n\n\ttype osOption struct {'
+          start = text.find(start_marker)
+          if start < 0:
+              raise SystemExit("forms.go: OS picker start not found")
+          options_start = text.find('\toptions := []osOption{', start)
+          options_end = text.find('\t}\n\n\tfor i, opt := range options {', options_start)
+          if options_start < 0 or options_end < 0:
+              raise SystemExit("forms.go: OS picker options not found")
+          prefix = text[:start]
+          suffix = text[options_end + len('\t}\n'):]
+          picker_head = '''\tb.WriteString("  Select Home Server image:\\n\\n")\n\n\ttype osOption struct {\n\t\tid   string\n\t\tname string\n\t\tdesc string\n\t}\n\toptions := []osOption{\n\t\t{model.HomeServerUCoreImage, "Home Server uCore", "Standard Home Server image. Small downstream of Universal Blue uCore."},\n\t\t{model.HomeServerUCoreHCIImage, "Home Server uCore HCI", "Virtualization/HCI image for libvirt/QEMU home-server hosts."},\n\t}\n'''
+          # Keep function prologue/styles before the old heading.
+          function_start = text.rfind('func (m *Model) viewOSPicker() string {', 0, start)
+          if function_start < 0:
+              raise SystemExit("forms.go: viewOSPicker function not found")
+          before_heading = text[function_start:start]
+          p.write_text(text[:function_start] + before_heading + picker_head + suffix)
+
+          # Replace only the OS-picker tests; generic FCOS card/update tests remain.
+          p = Path("internal/tui/fcos_tui_test.go")
+          text = p.read_text()
+          section_start = text.index("// ── OS picker sub-view")
+          section_end = text.index("// ── FCOS stream cards")
+          home_tests = r'''// ── Home Server target picker ────────────────────────────────────────────────
+
+func TestOSPicker_ShowsHomeServerTargets(t *testing.T) {
+    w := newTestWizard()
+    w.State.CurrentStep = model.StepWelcome
+    m := New(w)
+    if !m.osSubView {
+        t.Fatal("osSubView should be true after New() at StepWelcome")
+    }
+    out := m.viewChannelCards()
+    if !strings.Contains(out, "Home Server uCore") {
+        t.Errorf("picker should show Home Server uCore: %q", out)
+    }
+    if !strings.Contains(out, "Home Server uCore HCI") {
+        t.Errorf("picker should show Home Server uCore HCI: %q", out)
+    }
+    if strings.Contains(out, "Flatcar Container Linux") || strings.Contains(out, "Bluefin Server") {
+        t.Errorf("Home Server V1 picker should hide generic OS targets: %q", out)
+    }
+}
+
+func TestOSPicker_SelectHomeServerUCore_AdvancesToNetwork(t *testing.T) {
+    w := newTestWizard()
+    w.State.CurrentStep = model.StepWelcome
+    m := New(w)
+    m.cursor = 0
+    _, _ = m.handleEnter()
+
+    if m.Wizard.State.Config.OS != model.OSFCOS {
+        t.Errorf("expected bootstrap OS=fcos, got %q", m.Wizard.State.Config.OS)
+    }
+    if m.Wizard.State.Config.HomeServerImage != model.HomeServerUCoreImage {
+        t.Errorf("unexpected Home Server image %q", m.Wizard.State.Config.HomeServerImage)
+    }
+    if m.Wizard.State.CurrentStep != model.StepNetwork {
+        t.Errorf("expected StepNetwork, got %v", m.Wizard.State.CurrentStep)
+    }
+    if m.Wizard.State.Config.Swap.Enabled {
+        t.Error("Home Server bootstrap must not provision generic FCOS swap")
+    }
+}
+
+func TestOSPicker_SelectHomeServerUCoreHCI_AdvancesToNetwork(t *testing.T) {
+    w := newTestWizard()
+    w.State.CurrentStep = model.StepWelcome
+    m := New(w)
+    m.cursor = 1
+    _, _ = m.handleEnter()
+
+    if m.Wizard.State.Config.HomeServerImage != model.HomeServerUCoreHCIImage {
+        t.Errorf("unexpected Home Server image %q", m.Wizard.State.Config.HomeServerImage)
+    }
+    if m.Wizard.State.CurrentStep != model.StepNetwork {
+        t.Errorf("expected StepNetwork, got %v", m.Wizard.State.CurrentStep)
+    }
+}
+
+'''
+          p.write_text(text[:section_start] + home_tests + text[section_end:])
+
+          replace_once(
+              "internal/tui/update_test.go",
+              '''\t\t{\n\t\t\tstep:     model.StepWelcome,\n\t\t\texpected: 3, // OS picker (Flatcar | FCOS | Bluefin Server) — shown first via osSubView\n\t\t},\n''',
+              '''\t\t{\n\t\t\tstep:     model.StepWelcome,\n\t\t\texpected: 2, // Home Server uCore | Home Server uCore HCI\n\t\t},\n''')
+
+          ignition_test = r'''package ignition
+
+import (
+    "strings"
+    "testing"
+
+    "github.com/projectbluefin/knuckle/internal/model"
+)
+
+func TestGenerateHomeServerFCOSButane_SignedMinimalBootstrap(t *testing.T) {
+    cfg := &model.InstallConfig{
+        OS:              model.OSFCOS,
+        HomeServerImage: model.HomeServerUCoreImage,
+        Channel:         "stable",
+        Hostname:        "homeserver",
+        Timezone:        "UTC",
+        SSHKeys:         []string{"ssh-ed25519 AAAATEST home@test"},
+        Swap:            model.SwapConfig{Enabled: true, SizeMB: 4096},
+        Sysexts: []model.SysextEntry{{
+            Name: "should-not-survive",
+            URL:  "https://example.invalid/extension.raw",
+            Selected: true,
+        }},
+        Tailscale: model.TailscaleConfig{AuthKey: "tskey-auth-example"},
+    }
+
+    out, err := NewGenerator().GenerateFCOSButane(cfg)
+    if err != nil {
+        t.Fatalf("GenerateFCOSButane: %v", err)
+    }
+
+    for _, want := range []string{
+        "variant: fcos",
+        model.HomeServerUCoreImage,
+        "ostree-image-signed:docker://",
+        "sigstoreSigned",
+        "home-server-project.pub",
+        "home-server-autorebase.service",
+        "zincati.service",
+        "mask: true",
+    } {
+        if !strings.Contains(out, want) {
+            t.Errorf("output missing %q\n%s", want, out)
+        }
+    }
+    for _, unwanted := range []string{
+        "/etc/zincati/config.d/55-updates.toml",
+        "/var/swapfile",
+        "/etc/extensions/should-not-survive.raw",
+        "/etc/tailscale/tailscale.env",
+    } {
+        if strings.Contains(out, unwanted) {
+            t.Errorf("Home Server bootstrap unexpectedly contains %q\n%s", unwanted, out)
+        }
+    }
+
+    if _, err := CompileToIgnition(out); err != nil {
+        t.Fatalf("Home Server Butane did not compile: %v\n%s", err, out)
+    }
+}
+
+func TestGenerateHomeServerFCOSButane_RejectsUnknownImage(t *testing.T) {
+    cfg := &model.InstallConfig{OS: model.OSFCOS, HomeServerImage: "ghcr.io/example/not-home-server:latest"}
+    if _, err := NewGenerator().GenerateFCOSButane(cfg); err == nil {
+        t.Fatal("expected unsupported Home Server image to fail")
+    }
+}
+'''
+          Path("internal/ignition/home_server_test.go").write_text(ignition_test)
+
+          wizard_test = r'''package wizard
+
+import (
+    "testing"
+
+    "github.com/projectbluefin/knuckle/internal/model"
+)
+
+func TestHomeServerProfileSkipsGenericBootstrapSteps(t *testing.T) {
+    w := New(nil, nil, nil)
+    w.State.Config.OS = model.OSFCOS
+    w.State.Config.HomeServerImage = model.HomeServerUCoreImage
+    w.State.Config.Hostname = "homeserver"
+    w.State.Config.Users = []model.UserConfig{{Username: "core", SSHKeys: []string{"ssh-ed25519 AAAATEST test"}}}
+    w.State.CurrentStep = model.StepUser
+
+    if err := w.Next(); err != nil {
+        t.Fatalf("Next: %v", err)
+    }
+    if w.State.CurrentStep != model.StepReview {
+        t.Fatalf("Home Server should skip generic FCOS steps and land on Review, got %v", w.State.CurrentStep)
+    }
+
+    w.Previous()
+    if w.State.CurrentStep != model.StepUser {
+        t.Fatalf("Previous should skip generic FCOS steps and return to User, got %v", w.State.CurrentStep)
+    }
+}
+'''
+          Path("internal/wizard/home_server_test.go").write_text(wizard_test)
+          PY
+
+          gofmt -w \
+            internal/model/model.go \
+            internal/wizard/wizard.go \
+            internal/wizard/home_server_test.go \
+            internal/ignition/builder.go \
+            internal/ignition/ignition.go \
+            internal/ignition/home_server.go \
+            internal/ignition/home_server_test.go \
+            internal/tui/tui.go \
+            internal/tui/forms.go \
+            internal/tui/form_logic.go \
+            internal/tui/fcos_tui_test.go \
+            internal/tui/update_test.go
+
+      - name: Test
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./...
+          go vet ./...
+
+      - name: Commit V1
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/home-server-v1-bootstrap.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add Home Server uCore installer V1"
+          git push origin HEAD:main
