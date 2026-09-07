@@ -12,7 +12,7 @@ import (
 )
 
 const homeServerInstallerCosignPublicKey = `-----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIz0DAQcDQgAEWU3SeANKBm2Dql6FGZYNu2Bd7nZf
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWU3SeANKBm2Dql6FGZYNu2Bd7nZf
 wSS/hmdv0B25JOSqi0dbyvW8XAJHJ4UOl/GeOSQM4XuDey9yI9I09r9XWw==
 -----END PUBLIC KEY-----
 `
@@ -41,6 +41,8 @@ KEY_FILE="${18}"
 TARGET_ROOT=/var/mnt/home-server-target
 PODMAN_SCRATCH="${TARGET_ROOT}/.installer-podman"
 IMAGE_TMP="${TARGET_ROOT}/.installer-tmp"
+REGISTRIES_DIR=/etc/containers/registries.d
+REGISTRIES_FILE=""
 PODMAN_MOUNTED=0
 ROOT_MOUNTED=0
 BOOT_MOUNTED=0
@@ -48,6 +50,7 @@ EFI_MOUNTED=0
 
 cleanup_mounts() {
     set +e
+    if [[ -n "$REGISTRIES_FILE" ]]; then rm -f -- "$REGISTRIES_FILE"; fi
     if (( EFI_MOUNTED )); then umount "${TARGET_ROOT}/boot/efi"; fi
     if (( BOOT_MOUNTED )); then umount "${TARGET_ROOT}/boot"; fi
     if (( PODMAN_MOUNTED )); then umount /var/lib/containers; fi
@@ -67,7 +70,7 @@ case "$BOOT_MIB" in
     *) echo "unsupported /boot size: ${BOOT_MIB} MiB" >&2; exit 1 ;;
 esac
 
-for cmd in readlink lsblk wipefs sgdisk blockdev udevadm mkfs.vfat mkfs.ext4 mkfs.xfs mount umount mountpoint blkid podman bootc systemctl find install useradd usermod awk chown stat chcon matchpathcon; do
+for cmd in readlink lsblk wipefs sgdisk blockdev udevadm mkfs.vfat mkfs.ext4 mkfs.xfs mount umount mountpoint blkid podman bootc systemctl find install mktemp useradd usermod awk chown stat chcon matchpathcon; do
     command -v "$cmd" >/dev/null 2>&1 || {
         echo "required installer command not found: $cmd" >&2
         exit 1
@@ -159,9 +162,25 @@ mount --bind "$IMAGE_TMP" "$IMAGE_TMP"
 mount --bind "$PODMAN_SCRATCH" /var/lib/containers
 PODMAN_MOUNTED=1
 
+# containers/image needs registries.d metadata to discover Cosign signature
+# attachments stored alongside the image in GHCR. Keep this configuration
+# scoped to the live installer and remove it immediately after the pull.
+install -d -m0755 "$REGISTRIES_DIR"
+REGISTRIES_FILE="$(mktemp "${REGISTRIES_DIR}/00-home-server-installer.XXXXXX.yaml")"
+cat > "$REGISTRIES_FILE" <<'EOF_REGISTRIES'
+docker:
+  ghcr.io/home-server-project/home-server-ucore:
+    use-sigstore-attachments: true
+  ghcr.io/home-server-project/home-server-ucore-hci:
+    use-sigstore-attachments: true
+EOF_REGISTRIES
+chmod 0644 "$REGISTRIES_FILE"
+
 # The registry source must pass the Home Server sigstore policy before it is
 # admitted into the local target-backed store.
 env TMPDIR="$IMAGE_TMP" podman pull --signature-policy "$POLICY_FILE" "$IMAGE"
+rm -f -- "$REGISTRIES_FILE"
+REGISTRIES_FILE=""
 
 BOOTC_ARGS=(
     bootc install to-filesystem
