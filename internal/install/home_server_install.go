@@ -124,7 +124,7 @@ for _ in $(seq 1 20); do
     [[ -b "$P2" && -b "$P3" && -b "$P4" ]] && break
     sleep 0.25
     udevadm settle
- done
+done
 [[ -b "$P2" && -b "$P3" && -b "$P4" ]] || {
     echo "kernel did not expose new target partitions" >&2
     exit 1
@@ -285,6 +285,17 @@ else
     }
 fi
 
+# A passwordless SSH-only administrator must still be able to administer the
+# machine. Password-backed users keep normal wheel/password sudo behavior.
+SUDOERS_FILE="${DEPLOY}/etc/sudoers.d/90-home-server-admin"
+mkdir -p "${DEPLOY}/etc/sudoers.d"
+if [[ -z "$PASSWORD_HASH" ]]; then
+    printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$USERNAME" > "$SUDOERS_FILE"
+    chmod 0440 "$SUDOERS_FILE"
+else
+    rm -f "$SUDOERS_FILE"
+fi
+
 # /home points to /var/home at runtime. For an OSTree deployment, the real
 # persistent /var is the stateroot var directory, not ${DEPLOY}/var. A fresh
 # --skip-finalize deployment may not contain /var/home yet, so create it here.
@@ -414,12 +425,6 @@ EOF_NET
     chmod 0600 "${DEPLOY}/etc/NetworkManager/system-connections/home-server-static.nmconnection"
 fi
 
-# Enforce the update policy that is already proven for uCore: Zincati stays
-# masked and rpm-ostree stages updates automatically.
-systemctl --root="$DEPLOY" disable zincati.service || true
-systemctl --root="$DEPLOY" mask zincati.service
-systemctl --root="$DEPLOY" enable rpm-ostreed-automatic.timer
-
 # The target-image container is gone; temporary image storage can now be
 # removed before bootc finalize and before the first installed boot.
 umount /var/lib/containers
@@ -430,8 +435,23 @@ rm -rf "$PODMAN_SCRATCH" "$IMAGE_TMP"
 
 bootc install finalize "$TARGET_ROOT"
 
+# Apply and verify update policy against the finalized deployment. Pre-finalize
+# systemd enablement is not durable across bootc finalize on this image.
+systemctl --root="$DEPLOY" disable zincati.service || true
+systemctl --root="$DEPLOY" mask zincati.service
+systemctl --root="$DEPLOY" enable rpm-ostreed-automatic.timer
+
+[[ "$(systemctl --root="$DEPLOY" is-enabled zincati.service 2>/dev/null || true)" == "masked" ]] || {
+    echo "zincati is not masked in finalized target" >&2
+    exit 1
+}
+[[ "$(systemctl --root="$DEPLOY" is-enabled rpm-ostreed-automatic.timer 2>/dev/null || true)" == "enabled" ]] || {
+    echo "rpm-ostreed-automatic.timer is not enabled in finalized target" >&2
+    exit 1
+}
+
 # Finalization must preserve the directly provisioned account and persistent
-# SSH state. Fail rather than produce a machine that cannot be accessed.
+# SSH/admin state. Fail rather than produce a machine that cannot be accessed.
 grep -q "^${USERNAME}:" "${DEPLOY}/etc/passwd" || {
     echo "selected user did not survive bootc finalize" >&2
     exit 1
@@ -443,6 +463,25 @@ grep -q "^${USERNAME}:" "${DEPLOY}/etc/passwd" || {
 if [[ -s "$SSH_KEYS_FILE" ]]; then
     [[ -s "$PERSISTENT_HOME/.ssh/authorized_keys" ]] || {
         echo "authorized_keys did not survive bootc finalize" >&2
+        exit 1
+    }
+fi
+if [[ -z "$PASSWORD_HASH" ]]; then
+    [[ -f "$SUDOERS_FILE" ]] || {
+        echo "SSH-only admin sudoers file did not survive bootc finalize" >&2
+        exit 1
+    }
+    [[ "$(stat -c %a "$SUDOERS_FILE")" == "440" ]] || {
+        echo "SSH-only admin sudoers file has wrong permissions" >&2
+        exit 1
+    }
+    grep -Fxq "${USERNAME} ALL=(ALL) NOPASSWD: ALL" "$SUDOERS_FILE" || {
+        echo "SSH-only admin sudoers rule is incorrect" >&2
+        exit 1
+    }
+else
+    [[ ! -e "$SUDOERS_FILE" ]] || {
+        echo "password-backed admin unexpectedly has passwordless sudo rule" >&2
         exit 1
     }
 fi
