@@ -286,13 +286,22 @@ else
 fi
 
 # /home points to /var/home at runtime. For an OSTree deployment, the real
-# persistent /var is the stateroot var directory, not ${DEPLOY}/var.
-PERSISTENT_HOME_ROOT="${TARGET_ROOT}/ostree/deploy/fedora-coreos/var/home"
-PERSISTENT_HOME="${PERSISTENT_HOME_ROOT}/${USERNAME}"
-[[ -d "$PERSISTENT_HOME_ROOT" ]] || {
-    echo "persistent target /var/home is missing" >&2
+# persistent /var is the stateroot var directory, not ${DEPLOY}/var. A fresh
+# --skip-finalize deployment may not contain /var/home yet, so create it here.
+PERSISTENT_VAR_ROOT="${TARGET_ROOT}/ostree/deploy/fedora-coreos/var"
+[[ -d "$PERSISTENT_VAR_ROOT" ]] || {
+    echo "persistent target stateroot /var is missing" >&2
     exit 1
 }
+PERSISTENT_HOME_ROOT="${PERSISTENT_VAR_ROOT}/home"
+PERSISTENT_HOME="${PERSISTENT_HOME_ROOT}/${USERNAME}"
+install -d -m0755 "$PERSISTENT_HOME_ROOT"
+HOME_ROOT_CONTEXT="$(matchpathcon -n "/var/home")"
+[[ -n "$HOME_ROOT_CONTEXT" && "$HOME_ROOT_CONTEXT" != "<<none>>" ]] || {
+    echo "could not resolve SELinux context for /var/home" >&2
+    exit 1
+}
+chcon "$HOME_ROOT_CONTEXT" "$PERSISTENT_HOME_ROOT"
 
 install -d -m0700 "$PERSISTENT_HOME"
 chown "${USER_UID}:${USER_GID}" "$PERSISTENT_HOME"
@@ -322,6 +331,14 @@ if [[ -s "$SSH_KEYS_FILE" ]]; then
     chcon "$AUTH_KEYS_CONTEXT" "$PERSISTENT_HOME/.ssh/authorized_keys"
 fi
 
+[[ "$(stat -c %a "$PERSISTENT_HOME_ROOT")" == "755" ]] || {
+    echo "persistent /var/home has wrong permissions" >&2
+    exit 1
+}
+[[ "$(stat -c %C "$PERSISTENT_HOME_ROOT")" == "$HOME_ROOT_CONTEXT" ]] || {
+    echo "persistent /var/home has wrong SELinux context" >&2
+    exit 1
+}
 [[ "$(stat -c %u "$PERSISTENT_HOME")" == "$USER_UID" ]] || {
     echo "persistent user home has wrong owner" >&2
     exit 1
