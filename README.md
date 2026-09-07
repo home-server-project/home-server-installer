@@ -1,4 +1,10 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/home-server-project/.github/main/logo/banner-navy-mid.png" alt="Home Server Project banner">
+</p>
+
 # Home Server Installer
+
+**Current release:** [![GitHub Release](https://img.shields.io/github/v/release/home-server-project/home-server-installer?label=latest)](https://github.com/home-server-project/home-server-installer/releases/latest)
 
 > [!WARNING]
 > **V1 — VM testing is recommended first.**
@@ -52,6 +58,17 @@ Fedora CoreOS live ISO + Home Server Installer
 
 The selected uCore image is installed directly as the first bootable deployment. There is no installed Fedora CoreOS intermediate and no first-boot autorebase step.
 
+## What to expect when booting and installing
+
+> [!NOTE]
+> **The installer may take a few minutes to appear after booting.** Fedora CoreOS is starting in the background before the Home Server Installer UI launches, so a short wait is normal.
+>
+> During installation, the progress bar may remain around **20% for several minutes** while the selected uCore container image is downloaded, verified, and deployed.
+>
+> **This is expected. Do not power off or reboot the machine while installation is in progress.**
+>
+> Once that stage completes, installation normally advances quickly to completion.
+
 ## Signed image installation
 
 Home Server Project images are verified with the Home Server Project Cosign public key. Upstream `ublue-os/ucore*` images are verified with Universal Blue's uCore Cosign public key.
@@ -89,9 +106,13 @@ For SSH after installation:
 
 ## Builder template
 
-The planned [Home Server uCore Builder](https://github.com/home-server-project/home-server-ucore-builder) is a separate GitHub template project. Its purpose is to let a user create a personalized installer ISO in their own GitHub account using GitHub Actions.
+[Home Server uCore Builder](https://github.com/home-server-project/home-server-ucore-builder) is a separate GitHub template project for creating a personalized Home Server Installer ISO in the user's own GitHub account with GitHub Actions.
 
-The intended Builder flow is to import the user's **public SSH key** through GitHub Secrets and inject that public key into the generated ISO. The private key stays on the user's own computer and is never uploaded to GitHub or embedded in the ISO.
+The user creates a repository from the template, adds an `SSH_PUBLIC_KEY` repository Actions secret, and runs the build workflow. The Builder automatically resolves the **latest published Home Server Installer release** and builds the ISO from that exact release.
+
+Only the user's **public SSH key** is embedded. The private key stays on the user's own computer and is never uploaded to GitHub or embedded in the ISO.
+
+The Builder does not embed one selected uCore image. The personalized installer keeps all five V1 image choices, and the selected image is downloaded during installation. **An internet connection is required during the normal installation path.**
 
 ## Upstream
 
@@ -106,8 +127,10 @@ Related projects:
 
 ## Status
 
-**V1 is working in end-to-end VM testing.**
+**V1 has a published release and is working in end-to-end VM testing.**
 
-The current direct-install path has successfully completed installation and first boot with both Home Server Project and upstream Universal Blue uCore targets.
+See the [latest published release](https://github.com/home-server-project/home-server-installer/releases/latest) for the current version and release assets.
+
+The current direct-install path has successfully completed installation and first boot with both Home Server Project and upstream Universal Blue uCore targets. The personalized ISO path generated from a fresh Home Server uCore Builder template repository has also been validated.
 
 VM testing is recommended first. Bare-metal testing can be done on a **dedicated test drive or test hardware where the selected installation disk can be safely erased**. Keep backups of any important data before testing.
