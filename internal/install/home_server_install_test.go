@@ -35,6 +35,61 @@ func testHomeServerConfig(bootMiB int) *model.InstallConfig {
 	}
 }
 
+func TestHomeServerImageVerificationKey(t *testing.T) {
+	tests := []struct {
+		image   string
+		wantKey string
+	}{
+		{model.HomeServerUCoreImage, homeServerInstallerCosignPublicKey},
+		{model.HomeServerUCoreHCIImage, homeServerInstallerCosignPublicKey},
+		{model.UpstreamUCoreMinimalImage, upstreamUCoreCosignPublicKey},
+		{model.UpstreamUCoreImage, upstreamUCoreCosignPublicKey},
+		{model.UpstreamUCoreHCIImage, upstreamUCoreCosignPublicKey},
+	}
+	for _, tc := range tests {
+		t.Run(tc.image, func(t *testing.T) {
+			got, ok := homeServerImageVerificationKey(tc.image)
+			if !ok {
+				t.Fatalf("expected %q to be supported", tc.image)
+			}
+			if got != tc.wantKey {
+				t.Fatalf("verification key mismatch for %q", tc.image)
+			}
+		})
+	}
+	if _, ok := homeServerImageVerificationKey("ghcr.io/example/unknown:lts"); ok {
+		t.Fatal("unknown image must not be trusted")
+	}
+}
+
+func TestHomeServerInstallerAcceptsAllSupportedLTSImages(t *testing.T) {
+	images := []string{
+		model.HomeServerUCoreImage,
+		model.HomeServerUCoreHCIImage,
+		model.UpstreamUCoreMinimalImage,
+		model.UpstreamUCoreImage,
+		model.UpstreamUCoreHCIImage,
+	}
+	for _, image := range images {
+		t.Run(image, func(t *testing.T) {
+			spy := runner.NewSpyRunner()
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			cfg := testHomeServerConfig(model.HomeServerBootStandardMiB)
+			cfg.HomeServerImage = image
+
+			if err := NewHomeServerInstaller(spy, logger).Install(context.Background(), cfg, func(string) {}); err != nil {
+				t.Fatalf("Install() error = %v", err)
+			}
+			if len(spy.Calls) != 1 {
+				t.Fatalf("expected one direct-install invocation, got %d", len(spy.Calls))
+			}
+			if !strings.Contains(strings.Join(spy.Calls[0].Args, " "), image) {
+				t.Fatalf("direct install args missing selected image %q", image)
+			}
+		})
+	}
+}
+
 func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T) {
 	for _, bootMiB := range []int{model.HomeServerBootStandardMiB, model.HomeServerBootLargeMiB} {
 		t.Run(strconv.Itoa(bootMiB), func(t *testing.T) {
@@ -70,6 +125,9 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 				"00-home-server-installer.XXXXXX.yaml",
 				"ghcr.io/home-server-project/home-server-ucore:",
 				"ghcr.io/home-server-project/home-server-ucore-hci:",
+				"ghcr.io/ublue-os/ucore-minimal:",
+				"ghcr.io/ublue-os/ucore:",
+				"ghcr.io/ublue-os/ucore-hci:",
 				"use-sigstore-attachments: true",
 				"podman pull --signature-policy",
 				"rm -f -- \"$REGISTRIES_FILE\"",
@@ -169,6 +227,21 @@ func TestHomeServerInstallerRejectsUnknownBootSize(t *testing.T) {
 	}
 	if len(spy.Calls) != 0 {
 		t.Fatalf("destructive runner must not be called for invalid layout: %v", spy.Calls)
+	}
+}
+
+func TestHomeServerInstallerRejectsUnknownImage(t *testing.T) {
+	spy := runner.NewSpyRunner()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := testHomeServerConfig(model.HomeServerBootStandardMiB)
+	cfg.HomeServerImage = "ghcr.io/example/unknown:lts"
+
+	err := NewHomeServerInstaller(spy, logger).Install(context.Background(), cfg, func(string) {})
+	if err == nil || !strings.Contains(err.Error(), "unsupported Home Server image") {
+		t.Fatalf("expected unsupported image error, got %v", err)
+	}
+	if len(spy.Calls) != 0 {
+		t.Fatalf("destructive runner must not be called for unsupported image: %v", spy.Calls)
 	}
 }
 
