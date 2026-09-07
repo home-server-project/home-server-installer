@@ -58,9 +58,14 @@ const (
 
 // Home Server destination images. Fedora CoreOS is the live installer
 // environment; the selected signed uCore image is installed directly.
+// The installer intentionally exposes only LTS targets. Users who need a
+// stable/NVIDIA variant can bootc switch after installation.
 const (
 	HomeServerUCoreImage    = "ghcr.io/home-server-project/home-server-ucore:lts"
 	HomeServerUCoreHCIImage = "ghcr.io/home-server-project/home-server-ucore-hci:lts"
+	UpstreamUCoreMinimalImage = "ghcr.io/ublue-os/ucore-minimal:lts"
+	UpstreamUCoreImage        = "ghcr.io/ublue-os/ucore:lts"
+	UpstreamUCoreHCIImage     = "ghcr.io/ublue-os/ucore-hci:lts"
 )
 
 // Home Server /boot presets. Both remain user-selectable for every image.
@@ -74,7 +79,7 @@ const (
 // InstallConfig is the complete installation configuration built by the wizard.
 type InstallConfig struct {
 	OS                    string // "flatcar" | "fcos"; defaults to "flatcar" for backward compatibility
-	HomeServerImage       string // selected signed Home Server uCore destination; empty for generic Knuckle flows
+	HomeServerImage       string // selected signed Home Server/uCore destination; empty for generic Knuckle flows
 	HomeServerBootSizeMiB int    // Home Server XBOOTLDR /boot size; 1024 or 2048, 0 means default to 1024
 	Arch                  string // amd64 or arm64 (determined at ISO build time; default "amd64")
 	Channel               string // stable, beta, alpha, edge
