@@ -67,7 +67,7 @@ case "$BOOT_MIB" in
     *) echo "unsupported /boot size: ${BOOT_MIB} MiB" >&2; exit 1 ;;
 esac
 
-for cmd in readlink lsblk wipefs sgdisk blockdev udevadm mkfs.vfat mkfs.ext4 mkfs.xfs mount umount mountpoint blkid podman bootc systemctl find install; do
+for cmd in readlink lsblk wipefs sgdisk blockdev udevadm mkfs.vfat mkfs.ext4 mkfs.xfs mount umount mountpoint blkid podman bootc systemctl find install useradd usermod awk chown stat chcon matchpathcon; do
     command -v "$cmd" >/dev/null 2>&1 || {
         echo "required installer command not found: $cmd" >&2
         exit 1
@@ -178,7 +178,7 @@ BOOTC_ARGS=(
 )
 
 # Root key injection is retained as a recovery path during installation. The
-# normal configured user is provisioned below before the first installed boot.
+# normal configured user is provisioned directly below before first boot.
 if [[ -s "$SSH_KEYS_FILE" ]]; then
     BOOTC_ARGS=(
         "${BOOTC_ARGS[@]:0:${#BOOTC_ARGS[@]}-1}"
@@ -225,59 +225,153 @@ PubkeyAuthentication yes
 EOF_SSH
 chmod 0600 "${DEPLOY}/etc/ssh/sshd_config.d/99-home-server-installer.conf"
 
-# Provision the selected normal user before sshd starts on first boot. This
-# works for the existing core user and for a validated custom username.
-mkdir -p "${DEPLOY}/etc/home-server-installer"
-printf 'USERNAME=%q\nPASSWORD_HASH=%q\n' "$USERNAME" "$PASSWORD_HASH" > "${DEPLOY}/etc/home-server-installer/user.env"
-chmod 0600 "${DEPLOY}/etc/home-server-installer/user.env"
-if [[ -s "$SSH_KEYS_FILE" ]]; then
-    install -m0600 "$SSH_KEYS_FILE" "${DEPLOY}/etc/home-server-installer/authorized_keys"
+# Provision the selected user directly into the deployment. The uCore image
+# does not contain a normal login user by default, so first boot must not be
+# responsible for creating the account or installing its SSH key.
+if grep -q "^${USERNAME}:" "${DEPLOY}/etc/passwd"; then
+    usermod --root "$DEPLOY" --append --groups wheel "$USERNAME"
 else
-    : > "${DEPLOY}/etc/home-server-installer/authorized_keys"
-    chmod 0600 "${DEPLOY}/etc/home-server-installer/authorized_keys"
+    useradd --root "$DEPLOY" \
+        --no-create-home \
+        --user-group \
+        --groups wheel \
+        --home-dir "/var/home/${USERNAME}" \
+        --shell /bin/bash \
+        --comment "Home Server Admin" \
+        "$USERNAME"
 fi
-cat > "${DEPLOY}/etc/home-server-installer/provision-user.sh" <<'EOF_USER'
-#!/usr/bin/bash
-set -euo pipefail
-source /etc/home-server-installer/user.env
-if ! id "$USERNAME" >/dev/null 2>&1; then
-    useradd --create-home --user-group --groups wheel "$USERNAME"
-fi
+
 if [[ -n "$PASSWORD_HASH" ]]; then
-    usermod --password "$PASSWORD_HASH" "$USERNAME"
+    usermod --root "$DEPLOY" --password "$PASSWORD_HASH" "$USERNAME"
+else
+    usermod --root "$DEPLOY" --lock "$USERNAME"
 fi
-HOME_DIR="$(getent passwd "$USERNAME" | cut -d: -f6)"
-[[ -n "$HOME_DIR" ]] || { echo "could not resolve home for $USERNAME" >&2; exit 1; }
-install -d -m0700 -o "$USERNAME" -g "$USERNAME" "$HOME_DIR/.ssh"
-if [[ -s /etc/home-server-installer/authorized_keys ]]; then
-    install -m0600 -o "$USERNAME" -g "$USERNAME" /etc/home-server-installer/authorized_keys "$HOME_DIR/.ssh/authorized_keys"
-fi
-rm -f /etc/home-server-installer/authorized_keys /etc/home-server-installer/user.env
-systemctl disable home-server-provision-user.service || true
-rm -f /etc/systemd/system/multi-user.target.wants/home-server-provision-user.service
-rm -f /etc/systemd/system/home-server-provision-user.service
-rm -f /etc/home-server-installer/provision-user.sh
-rmdir /etc/home-server-installer 2>/dev/null || true
-EOF_USER
-chmod 0755 "${DEPLOY}/etc/home-server-installer/provision-user.sh"
-cat > "${DEPLOY}/etc/systemd/system/home-server-provision-user.service" <<'EOF_UNIT'
-[Unit]
-Description=Provision Home Server primary user
-Before=sshd.service
-After=local-fs.target
 
-[Service]
-Type=oneshot
-ExecStart=/etc/home-server-installer/provision-user.sh
-
-[Install]
-WantedBy=multi-user.target
-EOF_UNIT
-systemctl --root="$DEPLOY" enable home-server-provision-user.service
-[[ "$(systemctl --root="$DEPLOY" is-enabled home-server-provision-user.service)" == "enabled" ]] || {
-    echo "failed to enable Home Server user provisioning service" >&2
+USER_ENTRY="$(awk -F: -v user="$USERNAME" '$1 == user { print; exit }' "${DEPLOY}/etc/passwd")"
+[[ -n "$USER_ENTRY" ]] || {
+    echo "selected user was not written to target passwd" >&2
     exit 1
 }
+IFS=: read -r _ _ USER_UID USER_GID _ USER_HOME USER_SHELL <<< "$USER_ENTRY"
+[[ "$USER_UID" =~ ^[0-9]+$ && "$USER_GID" =~ ^[0-9]+$ ]] || {
+    echo "selected user has invalid target UID/GID" >&2
+    exit 1
+}
+[[ "$USER_HOME" == "/var/home/${USERNAME}" ]] || {
+    echo "selected user has unexpected home directory: ${USER_HOME}" >&2
+    exit 1
+}
+[[ "$USER_SHELL" == "/bin/bash" ]] || {
+    echo "selected user has unexpected shell: ${USER_SHELL}" >&2
+    exit 1
+}
+
+WHEEL_MEMBERS="$(awk -F: '$1 == "wheel" { print $4; exit }' "${DEPLOY}/etc/group")"
+case ",${WHEEL_MEMBERS}," in
+    *",${USERNAME},"*) ;;
+    *) echo "selected user was not added to wheel" >&2; exit 1 ;;
+esac
+
+SHADOW_HASH="$(awk -F: -v user="$USERNAME" '$1 == user { print $2; exit }' "${DEPLOY}/etc/shadow")"
+if [[ -n "$PASSWORD_HASH" ]]; then
+    [[ "$SHADOW_HASH" == "$PASSWORD_HASH" ]] || {
+        echo "selected user password hash was not written to target shadow" >&2
+        exit 1
+    }
+else
+    [[ "$SHADOW_HASH" == '!'* || "$SHADOW_HASH" == '*'* ]] || {
+        echo "selected user password is not locked for SSH-only install" >&2
+        exit 1
+    }
+fi
+
+# /home points to /var/home at runtime. For an OSTree deployment, the real
+# persistent /var is the stateroot var directory, not ${DEPLOY}/var.
+PERSISTENT_HOME_ROOT="${TARGET_ROOT}/ostree/deploy/fedora-coreos/var/home"
+PERSISTENT_HOME="${PERSISTENT_HOME_ROOT}/${USERNAME}"
+[[ -d "$PERSISTENT_HOME_ROOT" ]] || {
+    echo "persistent target /var/home is missing" >&2
+    exit 1
+}
+
+install -d -m0700 "$PERSISTENT_HOME"
+chown "${USER_UID}:${USER_GID}" "$PERSISTENT_HOME"
+HOME_CONTEXT="$(matchpathcon -n "/var/home/${USERNAME}")"
+[[ -n "$HOME_CONTEXT" && "$HOME_CONTEXT" != "<<none>>" ]] || {
+    echo "could not resolve SELinux context for user home" >&2
+    exit 1
+}
+chcon "$HOME_CONTEXT" "$PERSISTENT_HOME"
+
+if [[ -s "$SSH_KEYS_FILE" ]]; then
+    install -d -m0700 "$PERSISTENT_HOME/.ssh"
+    install -m0600 "$SSH_KEYS_FILE" "$PERSISTENT_HOME/.ssh/authorized_keys"
+    chown -R "${USER_UID}:${USER_GID}" "$PERSISTENT_HOME/.ssh"
+
+    SSH_CONTEXT="$(matchpathcon -n "/var/home/${USERNAME}/.ssh")"
+    AUTH_KEYS_CONTEXT="$(matchpathcon -n "/var/home/${USERNAME}/.ssh/authorized_keys")"
+    [[ -n "$SSH_CONTEXT" && "$SSH_CONTEXT" != "<<none>>" ]] || {
+        echo "could not resolve SELinux context for user SSH directory" >&2
+        exit 1
+    }
+    [[ -n "$AUTH_KEYS_CONTEXT" && "$AUTH_KEYS_CONTEXT" != "<<none>>" ]] || {
+        echo "could not resolve SELinux context for authorized_keys" >&2
+        exit 1
+    }
+    chcon "$SSH_CONTEXT" "$PERSISTENT_HOME/.ssh"
+    chcon "$AUTH_KEYS_CONTEXT" "$PERSISTENT_HOME/.ssh/authorized_keys"
+fi
+
+[[ "$(stat -c %u "$PERSISTENT_HOME")" == "$USER_UID" ]] || {
+    echo "persistent user home has wrong owner" >&2
+    exit 1
+}
+[[ "$(stat -c %g "$PERSISTENT_HOME")" == "$USER_GID" ]] || {
+    echo "persistent user home has wrong group" >&2
+    exit 1
+}
+[[ "$(stat -c %a "$PERSISTENT_HOME")" == "700" ]] || {
+    echo "persistent user home has wrong permissions" >&2
+    exit 1
+}
+[[ "$(stat -c %C "$PERSISTENT_HOME")" == "$HOME_CONTEXT" ]] || {
+    echo "persistent user home has wrong SELinux context" >&2
+    exit 1
+}
+
+if [[ -s "$SSH_KEYS_FILE" ]]; then
+    [[ -s "$PERSISTENT_HOME/.ssh/authorized_keys" ]] || {
+        echo "authorized_keys was not written to persistent user home" >&2
+        exit 1
+    }
+    [[ "$(stat -c %u "$PERSISTENT_HOME/.ssh/authorized_keys")" == "$USER_UID" ]] || {
+        echo "authorized_keys has wrong owner" >&2
+        exit 1
+    }
+    [[ "$(stat -c %g "$PERSISTENT_HOME/.ssh/authorized_keys")" == "$USER_GID" ]] || {
+        echo "authorized_keys has wrong group" >&2
+        exit 1
+    }
+    [[ "$(stat -c %a "$PERSISTENT_HOME/.ssh/authorized_keys")" == "600" ]] || {
+        echo "authorized_keys has wrong permissions" >&2
+        exit 1
+    }
+    [[ "$(stat -c %C "$PERSISTENT_HOME/.ssh")" == "$SSH_CONTEXT" ]] || {
+        echo "user SSH directory has wrong SELinux context" >&2
+        exit 1
+    }
+    [[ "$(stat -c %C "$PERSISTENT_HOME/.ssh/authorized_keys")" == "$AUTH_KEYS_CONTEXT" ]] || {
+        echo "authorized_keys has wrong SELinux context" >&2
+        exit 1
+    }
+fi
+
+# The old first-boot provisioning mechanism is intentionally absent. A
+# completed install must already contain the final user and SSH state.
+rm -rf "${DEPLOY}/etc/home-server-installer"
+rm -f \
+    "${DEPLOY}/etc/systemd/system/home-server-provision-user.service" \
+    "${DEPLOY}/etc/systemd/system/multi-user.target.wants/home-server-provision-user.service"
 
 if [[ "$NETWORK_MODE" == static ]]; then
     [[ -n "$NETWORK_IFACE" && -n "$NETWORK_ADDR" && -n "$NETWORK_GATEWAY" ]] || {
@@ -319,11 +413,24 @@ rm -rf "$PODMAN_SCRATCH" "$IMAGE_TMP"
 
 bootc install finalize "$TARGET_ROOT"
 
-# Finalization must not drop the first-boot provisioning enablement. Re-enable
-# defensively, then fail the install if systemd still does not see it enabled.
-systemctl --root="$DEPLOY" enable home-server-provision-user.service
-[[ "$(systemctl --root="$DEPLOY" is-enabled home-server-provision-user.service)" == "enabled" ]] || {
-    echo "Home Server user provisioning service did not survive bootc finalize" >&2
+# Finalization must preserve the directly provisioned account and persistent
+# SSH state. Fail rather than produce a machine that cannot be accessed.
+grep -q "^${USERNAME}:" "${DEPLOY}/etc/passwd" || {
+    echo "selected user did not survive bootc finalize" >&2
+    exit 1
+}
+[[ -d "$PERSISTENT_HOME" ]] || {
+    echo "persistent user home did not survive bootc finalize" >&2
+    exit 1
+}
+if [[ -s "$SSH_KEYS_FILE" ]]; then
+    [[ -s "$PERSISTENT_HOME/.ssh/authorized_keys" ]] || {
+        echo "authorized_keys did not survive bootc finalize" >&2
+        exit 1
+    }
+fi
+[[ ! -e "${DEPLOY}/etc/systemd/system/home-server-provision-user.service" ]] || {
+    echo "obsolete first-boot provisioning service remains in target" >&2
     exit 1
 }
 sync
@@ -365,7 +472,11 @@ func (i *HomeServerInstaller) Install(ctx context.Context, cfg *model.InstallCon
 		return fmt.Errorf("Home Server install requires a primary user")
 	}
 
-	sshFile, err := writePrivateTemp("knuckle-home-server-keys-*", strings.Join(cfg.SSHKeys, "\n")+"\n")
+	sshKeyContent := ""
+	if len(cfg.SSHKeys) > 0 {
+		sshKeyContent = strings.Join(cfg.SSHKeys, "\n") + "\n"
+	}
+	sshFile, err := writePrivateTemp("knuckle-home-server-keys-*", sshKeyContent)
 	if err != nil {
 		return fmt.Errorf("writing temporary SSH keys: %w", err)
 	}
