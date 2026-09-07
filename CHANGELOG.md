@@ -35,7 +35,7 @@ The inherited upstream Knuckle release history has been removed here because it 
   - `AutomaticUpdatePolicy=stage` retained.
 - Installer residue checks confirm no installed `home-server-installer.service`, no `/opt/knuckle`, and no temporary signature-discovery file remain after installation.
 - The self-contained Fedora CoreOS live ISO builder supports an optional public SSH key for access to the live installer environment.
-- Builder-injected live SSH public keys are now handed into Knuckle's normal SSH-key collection path so the same public key can be carried into the installed Home Server without requiring a second paste in the TUI.
+- The builder now also places that public key in a dedicated live-only `/opt/home-server-installer-ssh.pub` handoff file. The Home Server TUI reads that explicit file and merges the key into the normal installer SSH-key configuration without depending on `$HOME` or scanning the live `core` account's authorized-key files.
 
 ### Verified in clean VM end-to-end testing
 The 2026-09-07 clean uCore HCI VM run completed through the normal installer path with no Podman wrapper, custom `PATH`, service stop, or signature bypass.
@@ -58,8 +58,9 @@ Verified results:
 - No installer signature configuration, installer systemd service, or `/opt/knuckle` binary remained in the installed system.
 
 ### Still to validate end-to-end
-- Build an ISO with `--ssh-key`, leave the installer password blank, do not paste an SSH key in the TUI, install normally, reboot, and confirm the builder-provided public key works for SSH on the installed system.
-- Confirm the SSH-key-only path also produces the intended `NOPASSWD` sudo rule on the finished machine.
+- Rebuild with the dedicated builder-key handoff, enter no SSH key manually, install normally, reboot, and confirm the builder-provided public key works for SSH on the installed system.
+- Validate the builder-key handoff with a password-backed account: SSH key login must work while `sudo` still requires the password.
+- Validate the SSH-key-only path with a blank password and confirm the intended `NOPASSWD` sudo rule on the finished machine.
 
 ### Notes
 - Installation progress may remain around 20% for several minutes while the container image is downloaded and deployed. This is expected; do not power off or reboot during this stage.
