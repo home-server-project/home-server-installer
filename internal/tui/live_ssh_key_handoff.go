@@ -32,9 +32,10 @@ func homeServerAutomaticSSHKeys() []string {
 }
 
 func (m *Model) homeServerKeysSummary() string {
-	builderKeys := detectLiveInstallerBuilderSSHKeys()
-	localKeys := detectLocalSSHKeys()
+	return homeServerKeysSummaryFor(detectLiveInstallerBuilderSSHKeys(), detectLocalSSHKeys())
+}
 
+func homeServerKeysSummaryFor(builderKeys, localKeys []string) string {
 	switch {
 	case len(builderKeys) > 0 && len(localKeys) > 0:
 		return fmt.Sprintf("🔑 Builder SSH key detected; %d additional local key(s) will also be included automatically", len(localKeys))
