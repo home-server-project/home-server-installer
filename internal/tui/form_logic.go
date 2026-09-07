@@ -102,11 +102,15 @@ func (m *Model) onFormComplete() tea.Cmd {
 		})
 
 	case model.StepUser:
+		automaticKeys := detectLocalSSHKeys()
+		if cfg.HomeServerImage != "" {
+			automaticKeys = homeServerAutomaticSSHKeys()
+		}
 		if err := m.Wizard.ApplyUserStep(wizard.UserStepInput{
 			Username:  m.usernameInput,
 			Password:  m.passwordInput,
 			ManualKey: m.sshKeyInput,
-			LocalKeys: detectLocalSSHKeys(),
+			LocalKeys: automaticKeys,
 			Hostname:  cfg.Hostname,
 			Timezone:  cfg.Timezone,
 		}); err != nil {
