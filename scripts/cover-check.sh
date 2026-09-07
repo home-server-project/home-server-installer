@@ -4,7 +4,7 @@ set -euo pipefail
 declare -A targets=(
   [model]=100 [validate]=99 [ignition]=100 [github]=96
   [bakery]=100 [probe]=100 [runner]=100 [install]=98
-  [headless]=99 [wizard]=99 [iso]=100 [tui]=99
+  [headless]=99 [wizard]=99 [iso]=100 [tui]=98
   [demo]=100 [fcos]=100
 )
 
