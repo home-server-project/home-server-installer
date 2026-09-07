@@ -1,23 +1,29 @@
 # Home Server Installer
 
 > [!WARNING]
-> **In development. Destructive installer. Use only in disposable VMs/test hardware for now.**
+> **V1 — VM testing is recommended first.**
 >
+> - For bare-metal testing, use a **dedicated test drive or hardware where the selected installation disk can be safely erased**, and keep backups of anything important.
+> - The installer provides **target-disk selection**, **1 GiB / 2 GiB `/boot` layout selection**, **local password setup**, and **SSH key configuration**.
+> - The installer erases and repartitions **only the selected target disk**; all installer-created partitions are placed on that selected drive.
 > - **UEFI only** for the current V1 path.
-> - **The selected target disk is erased.**
-> - V1 installs to a **single target disk**. Multi-disk/NAS hardware has not been cleared for real-machine use yet.
-> - **Secure Boot is not a supported V1 real-hardware path.** Keep it disabled until the MOK flow is implemented and tested.
+> - **Secure Boot must be disabled during installation.** After installation, follow the current [uCore Secure Boot instructions](https://github.com/ublue-os/ucore) if you want to enable Secure Boot.
 
-Home Server Installer is a friendly Fedora CoreOS-based installer for [Home Server uCore](https://github.com/home-server-project/home-server-ucore).
+Home Server Installer is a friendly Fedora CoreOS-based installer for [Home Server uCore](https://github.com/home-server-project/home-server-ucore) and selected upstream [Universal Blue uCore](https://github.com/ublue-os/ucore) images.
 
-It is a thin downstream adaptation of [Project Bluefin Knuckle](https://github.com/projectbluefin/knuckle). The goal is to keep Knuckle's proven TUI, hardware discovery and Fedora CoreOS installer backend, while adding the Home Server-specific image selection and first-boot uCore transition.
+It is a thin downstream adaptation of [Project Bluefin Knuckle](https://github.com/projectbluefin/knuckle). The goal is to keep Knuckle's proven TUI and hardware discovery while providing a Home Server-focused, signed, direct-install path for uCore.
 
-## V1 targets
+## V1 image choices
 
-- `ghcr.io/home-server-project/home-server-ucore:lts`
-- `ghcr.io/home-server-project/home-server-ucore-hci:lts`
+The installer currently exposes five signed LTS targets:
 
-Upstream uCore image choices can be added later without redesigning the installer.
+- `ghcr.io/home-server-project/home-server-ucore:lts` — Home Server uCore LTS (default/recommended).
+- `ghcr.io/home-server-project/home-server-ucore-hci:lts` — Home Server uCore HCI LTS.
+- `ghcr.io/ublue-os/ucore-minimal:lts` — upstream Universal Blue uCore Minimal LTS.
+- `ghcr.io/ublue-os/ucore:lts` — upstream Universal Blue uCore LTS.
+- `ghcr.io/ublue-os/ucore-hci:lts` — upstream Universal Blue uCore HCI LTS.
+
+The installer intentionally keeps the menu to LTS targets. Stable, NVIDIA and custom images can remain post-install `bootc switch` destinations instead of turning the installer into a large image matrix.
 
 ## V1 flow
 
@@ -25,48 +31,67 @@ Upstream uCore image choices can be added later without redesigning the installe
 Fedora CoreOS live ISO + Home Server Installer
                  |
                  v
-      choose uCore / uCore HCI
-      network / disk / user / SSH
+      choose signed uCore image
+      disk / boot layout / user / SSH
                  |
                  v
-        coreos-installer installs FCOS
+    verify and pull selected image
                  |
                  v
-  first boot verifies the Home Server signature
-  and rebases directly to the selected signed image
+       partition selected disk
+                 |
+                 v
+   direct bootc install to filesystem
                  |
                  v
                reboot
                  |
                  v
-          Home Server uCore
+       selected uCore image boots
 ```
 
-The Home Server path intentionally keeps the temporary Fedora CoreOS configuration minimal. Generic Knuckle Flatcar/FCOS functionality remains in the codebase so upstream changes can continue to be merged, but it is not exposed as the primary Home Server V1 flow.
+The selected uCore image is installed directly as the first bootable deployment. There is no installed Fedora CoreOS intermediate and no first-boot autorebase step.
 
-### Signed first rebase
+## Signed image installation
 
-V1 injects the Home Server Cosign public key and a temporary container signature policy into the installed Fedora CoreOS system. That policy allows only the two signed Home Server image repositories for the first rebase.
+Home Server Project images are verified with the Home Server Project Cosign public key. Upstream `ublue-os/ucore*` images are verified with Universal Blue's uCore Cosign public key.
 
-The rebase service retries transient network/registry failures with backoff and leaves a visible MOTD/journal breadcrumb if all attempts fail. After a successful signed rebase is staged, the temporary FCOS trust policy is restored to the original FCOS default before reboot. A one-shot cleanup on the first Home Server uCore boot then restores the image-provided container policy and removes the bootstrap trust files/services.
+Only supported repositories are accepted by the Home Server path. Unknown image repositories are rejected. Temporary signature-discovery configuration used during installation is cleaned up and does not persist into the installed system.
 
-## Known V1 limitation: disk layout
+## Storage layout
 
-V1 deliberately uses the standard Fedora CoreOS disk layout so the new installer/rebase mechanics can be proven first.
+V1 uses a direct Home Server storage layout on the user-selected target disk:
 
-The stock FCOS `/boot` size is not the final Home Server design. A later milestone will add a larger `/boot` option (1 GiB / 2 GiB) required for the Home Server/uCore update workflow.
+- 1 MiB BIOS boot partition.
+- 512 MiB EFI System Partition.
+- ext4 XBOOTLDR `/boot` with one of two presets:
+  - **1 GiB** — standard and recommended for uCore / uCore HCI.
+  - **2 GiB** — large layout for NVIDIA or custom-image use cases.
+- XFS `/` using the remaining disk.
 
-**Changing to that larger `/boot` layout will require reinstalling the machine. A normal uCore/bootc update cannot resize the existing V1 partition layout.**
+The selected target disk is revalidated immediately before destructive partitioning, including device identity, expected size, serial when available, and mounted-filesystem checks.
 
-## Disk safety scope
+Clean VM testing has also verified that a separate attached non-target sentinel disk remains untouched during installation. Bare-metal testing can follow on a dedicated test drive or test hardware where the selected installation disk can be safely erased.
 
-The installer passes only the explicitly selected target disk to `coreos-installer`, and the review screen shows the selected disk before the destructive confirmation.
+## User and SSH access
 
-Before real hardware is in scope, the Home Server VM test suite must also prove that an attached non-target data disk remains unchanged during installation.
+The installer can create the primary user during installation and supports a **local password**, SSH authorized keys, or a key-only administration path.
 
-## Builder
+Password-backed users keep normal password-required `sudo` behavior. The SSH-key-only/passwordless administration path is implemented but remains part of the remaining end-to-end validation work.
 
-The future Builder template will create the personalized installer ISO and can add small per-user settings such as an SSH public key. Private SSH keys never belong in an ISO.
+A public SSH key can also be supplied to the self-contained local ISO build used for development/testing. Only the public key is embedded; private SSH keys never belong in an installer ISO.
+
+For SSH after installation:
+
+- `ssh user@IP` works when the matching private key is available through `ssh-agent`, a normal default SSH identity, or SSH client configuration.
+- If the private key has a custom filename and is not loaded into an agent, use `ssh -i /path/to/private-key user@IP`.
+- After reinstalling a machine at the same IP, the client may need `ssh-keygen -R IP` because a fresh installation generates a new SSH host identity.
+
+## Builder template
+
+The planned [Home Server uCore Builder](https://github.com/home-server-project/home-server-ucore-builder) is a separate GitHub template project. Its purpose is to let a user create a personalized installer ISO in their own GitHub account using GitHub Actions.
+
+The intended Builder flow is to import the user's **public SSH key** through GitHub Secrets and inject that public key into the generated ISO. The private key stays on the user's own computer and is never uploaded to GitHub or embedded in the ISO.
 
 ## Upstream
 
@@ -75,11 +100,14 @@ This repository is derived from [Project Bluefin Knuckle](https://github.com/pro
 Related projects:
 
 - [Home Server uCore](https://github.com/home-server-project/home-server-ucore)
+- [Home Server uCore Builder](https://github.com/home-server-project/home-server-ucore-builder)
 - [Universal Blue uCore](https://github.com/ublue-os/ucore)
 - [Fedora CoreOS](https://fedoraproject.org/coreos/)
 
 ## Status
 
-**V1 is development software and is not ready for installation on a real home server.**
+**V1 is working in end-to-end VM testing.**
 
-The next milestone is a complete end-to-end disposable-VM installation test of the V1 flow.
+The current direct-install path has successfully completed installation and first boot with both Home Server Project and upstream Universal Blue uCore targets.
+
+VM testing is recommended first. Bare-metal testing can be done on a **dedicated test drive or test hardware where the selected installation disk can be safely erased**. Keep backups of any important data before testing.

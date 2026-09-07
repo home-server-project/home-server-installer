@@ -1,49 +1,52 @@
-# Release Checklist — knuckle
+# Release Checklist
 
-Run this before tagging any release. Every item must be green.
+> **V1 note:** Home Server Installer V1 is currently validated through end-to-end VM installation. Before publishing a V1 release intended for broader testing, verify the current branch in a clean VM and keep bare-metal validation limited to a dedicated test drive or test hardware where the selected installation disk can be safely erased.
 
-```bash
-# One command to verify everything
-just tools && just ci
-```
+## Pre-release checks
 
-## Gates
+- [ ] `go test ./internal/install ./internal/model ./internal/tui` passes.
+- [ ] `gofmt` is clean for changed Go files.
+- [ ] The installer ISO builds successfully from the current branch.
+- [ ] The ISO boots in UEFI mode and the Home Server Installer TUI appears.
+- [ ] All five signed LTS image choices are displayed correctly.
+- [ ] At least one Home Server Project target completes signed pull, direct install, reboot, and first boot.
+- [ ] At least one upstream Universal Blue uCore target completes signed pull, direct install, reboot, and first boot.
+- [ ] The selected target disk and `/boot` layout shown in the review screen match the intended test configuration.
+- [ ] A separate attached non-target test disk remains unchanged.
+- [ ] Local-password provisioning works when selected.
+- [ ] SSH public-key provisioning works after installation.
+- [ ] `sudo bootc status` reports the expected installed image.
+- [ ] `sudo systemctl --failed --no-pager` reports no unexpected failed units.
+- [ ] Installer-only files/services do not remain in the installed system.
+- [ ] `README.md`, `CHANGELOG.md`, and this release checklist describe the current behavior accurately.
 
-- [ ] `go mod tidy && git diff --exit-code go.mod go.sum` — module graph clean
-- [ ] `gofmt -l .` empty
-- [ ] `go vet ./...` clean
-- [ ] `.tools/golangci-lint run ./...` clean
-- [ ] `go tool govulncheck ./...` — `No vulnerabilities found.`
-- [ ] `go test -race ./...` — all packages green
-- [ ] `just cover-check` — all packages above gate thresholds
-- [ ] `just headless-test` — config generation e2e passes
-- [ ] `just vm-e2e` — all 4 passes green (DHCP · static · sysext · NVIDIA)
-- [ ] `just build` — binary compiles
-- [ ] `git status` clean — no untracked files
-- [ ] `grep -rn 'exec\.Command' --include='*.go' --exclude-dir=internal/runner .` → zero results
-- [ ] All claims in `README.md` still true
-- [ ] `docs/internal/REVIEW-*.md` reconciled — every blocker fixed or deferred with issue
+## V1 installation expectations
 
-## VM Verification (required)
+The current V1 path:
 
-```bash
-just vm       # manual TUI walkthrough — confirm install + SSH on installed system
-just vm-e2e   # automated 4-pass — must exit 0
-```
+1. Boots a Fedora CoreOS live installer environment.
+2. Lets the user select a supported signed uCore image.
+3. Lets the user select the target disk and 1 GiB or 2 GiB `/boot` layout.
+4. Collects primary-user, local-password, and SSH-key configuration.
+5. Verifies and pulls the selected signed image.
+6. Partitions only the selected target disk.
+7. Installs the selected image directly with `bootc install to-filesystem`.
+8. Reboots directly into the selected uCore image.
 
-## Tag and Push
+There is no installed Fedora CoreOS intermediate and no first-boot autorebase step.
 
-```bash
-git tag v0.X.Y
-git push origin v0.X.Y   # triggers release.yml: build → sign → publish
-```
+## Secure Boot
 
-The release workflow (`release.yml`) builds amd64 + arm64 binaries, installer ISOs,
-cosign keyless signatures, and publishes a GitHub Release. See `docs/GHOST-LAB.md`
-for validating ARM64 artifacts before tagging.
+Secure Boot must be disabled during the current V1 installation path. After installation, follow the current [uCore documentation](https://github.com/ublue-os/ucore) if Secure Boot is to be configured or enabled.
 
-## Blockers History
+## Release notes
 
-B1 (GPG) ✓ · B2 (reboot runner) ✓ · B3 (headless disk path) ✓ · B4 (SSH keys → Ignition) ✓
+For V1 releases, clearly state:
 
-No open blockers for v1.0.
+- which Home Server Installer commit/tag was built;
+- Fedora CoreOS live ISO version used by the builder;
+- which uCore targets were tested end to end;
+- whether the release has been tested only in VMs or also on dedicated bare-metal test hardware;
+- any known installation limitations.
+
+The inherited Project Bluefin Knuckle release process is not the release process for this fork. Upstream release history remains available at [Project Bluefin Knuckle](https://github.com/projectbluefin/knuckle).

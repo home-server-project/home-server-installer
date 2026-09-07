@@ -78,7 +78,7 @@ run_expect_fail() {
   run grep -F 'data:text/plain;charset=utf-8;base64,' "$SCRIPT"
   [ "$status" -eq 0 ]
 
-  run grep -F 'base64.b64encode(bootstrap.encode("utf-8"))' "$SCRIPT"
+  run grep -F 'base64.b64encode(text.encode("utf-8"))' "$SCRIPT"
   [ "$status" -eq 0 ]
 }
 
@@ -141,6 +141,20 @@ run_expect_fail() {
 @test "--ssh-key=value (equals form) does not trigger unknown-argument error" {
   run bash "$SCRIPT" --ssh-key="ssh-ed25519 AAAA..." 2>&1 || true
   [[ "$output" != *"Unknown argument"* ]]
+}
+
+@test "FCOS builder creates dedicated live SSH key handoff" {
+  run grep -F '"path": "/opt/home-server-installer-ssh.pub"' "$SCRIPT"
+  [ "$status" -eq 0 ]
+
+  run grep -F '"mode": 0o600' "$SCRIPT"
+  [ "$status" -eq 0 ]
+
+  run grep -F 'data_source(ssh_key + "\n")' "$SCRIPT"
+  [ "$status" -eq 0 ]
+
+  run grep -F '"sshAuthorizedKeys": [ssh_key]' "$SCRIPT"
+  [ "$status" -eq 0 ]
 }
 
 @test "missing coreos-installer prints dependency error" {

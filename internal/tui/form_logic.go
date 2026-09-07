@@ -47,7 +47,14 @@ func (m *Model) initForm() {
 		if m.Wizard.State.Config.Timezone == "" {
 			m.Wizard.State.Config.Timezone = "UTC"
 		}
-		m.activeForm = m.buildUserForm()
+		if m.Wizard.State.Config.HomeServerImage != "" {
+			if m.Wizard.State.Config.HomeServerBootSizeMiB == 0 {
+				m.Wizard.State.Config.HomeServerBootSizeMiB = model.HomeServerBootStandardMiB
+			}
+			m.activeForm = m.buildHomeServerUserForm()
+		} else {
+			m.activeForm = m.buildUserForm()
+		}
 	case model.StepTailscale:
 		m.tailscaleAuthKeyIn = m.Wizard.State.Config.Tailscale.AuthKey
 		m.tailscaleModeIn = m.Wizard.State.Config.Tailscale.Mode
@@ -57,7 +64,11 @@ func (m *Model) initForm() {
 		m.tailscaleRoutesIn = m.Wizard.State.Config.Tailscale.Routes
 		m.activeForm = m.buildTailscaleForm()
 	case model.StepReview:
-		m.activeForm = m.buildReviewForm()
+		if m.Wizard.State.Config.HomeServerImage != "" {
+			m.activeForm = m.buildHomeServerReviewForm()
+		} else {
+			m.activeForm = m.buildReviewForm()
+		}
 	default:
 		m.activeForm = nil
 	}
@@ -91,11 +102,15 @@ func (m *Model) onFormComplete() tea.Cmd {
 		})
 
 	case model.StepUser:
+		automaticKeys := detectLocalSSHKeys()
+		if cfg.HomeServerImage != "" {
+			automaticKeys = homeServerAutomaticSSHKeys()
+		}
 		if err := m.Wizard.ApplyUserStep(wizard.UserStepInput{
 			Username:  m.usernameInput,
 			Password:  m.passwordInput,
 			ManualKey: m.sshKeyInput,
-			LocalKeys: detectLocalSSHKeys(),
+			LocalKeys: automaticKeys,
 			Hostname:  cfg.Hostname,
 			Timezone:  cfg.Timezone,
 		}); err != nil {

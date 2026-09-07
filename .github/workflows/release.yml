@@ -1,4 +1,4 @@
-name: Release
+name: Release Home Server Installer V1
 
 on:
   push:
@@ -6,438 +6,104 @@ on:
 
 permissions:
   contents: write
-  id-token: write      # cosign keyless OIDC signing
-  packages: write      # push to GHCR via oras
-  attestations: write  # SLSA provenance
-
-env:
-  IMAGE_REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  id-token: write
+  attestations: write
 
 jobs:
-  create-release:
-    name: Create draft release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - name: Create or verify draft release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
-        with:
-          draft: true
-          make_latest: "false"
-          generate_release_notes: true
-
   release-amd64:
-    name: Release (amd64)
+    name: Build and publish amd64 release
     runs-on: ubuntu-latest
-    needs: create-release
+    timeout-minutes: 45
     steps:
-      - name: Check release state (amd64)
-        id: release-check
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            echo "skip_upload=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          is_draft=$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq '.isDraft')
-          if [[ "$is_draft" == "true" ]]; then
-            echo "skip_upload=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          assets=$(gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets[].name')
-          missing=()
-          for asset in \
-            knuckle-linux-amd64 \
-            knuckle-linux-amd64.sha256 \
-            knuckle-linux-amd64.bundle \
-            knuckle-linux-amd64.spdx.json \
-            knuckle-linux-amd64.spdx.json.bundle \
-            knuckle-installer-stable-amd64.iso \
-            knuckle-installer-stable-amd64.iso.sha256 \
-            knuckle-installer-stable-amd64.iso.bundle; do
-            echo "$assets" | grep -Fx "$asset" >/dev/null || missing+=("$asset")
-          done
-
-          if (( ${#missing[@]} > 0 )); then
-            echo "Published release ${GITHUB_REF_NAME} is immutable and missing amd64 assets:" >&2
-            printf '  - %s\n' "${missing[@]}" >&2
-            exit 1
-          fi
-
-          echo "Published release already contains all amd64 assets; skipping amd64 build/upload."
-          echo "skip_upload=true" >> "$GITHUB_OUTPUT"
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        if: steps.release-check.outputs.skip_upload != 'true'
         with:
           persist-credentials: false
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        if: steps.release-check.outputs.skip_upload != 'true'
         with:
           go-version: "1.26.6"
           check-latest: true
 
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-        if: steps.release-check.outputs.skip_upload != 'true'
-
-      - uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2
-        if: steps.release-check.outputs.skip_upload != 'true'
 
       - uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
-        if: steps.release-check.outputs.skip_upload != 'true'
 
-      - name: Build binary
-        if: steps.release-check.outputs.skip_upload != 'true'
+      - name: build installer binary
         run: |
+          set -euo pipefail
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
-            go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" \
-            -o knuckle-linux-amd64 ./cmd/knuckle
-          sha256sum knuckle-linux-amd64 > knuckle-linux-amd64.sha256
+            go build -buildvcs=false \
+            -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" \
+            -o home-server-installer-linux-amd64 \
+            ./cmd/knuckle
+          sha256sum home-server-installer-linux-amd64 \
+            > home-server-installer-linux-amd64.sha256
 
-      - name: Install ISO dependencies (amd64)
-        if: steps.release-check.outputs.skip_upload != 'true'
+      - name: install FCOS ISO build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y xorriso mtools cpio systemd-boot-efi
+          sudo tee /usr/local/bin/coreos-installer >/dev/null <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec docker run --rm \
+            --security-opt label=disable \
+            -v "$PWD:$PWD" \
+            -w "$PWD" \
+            quay.io/coreos/coreos-installer:release "$@"
+          EOF
+          sudo chmod 0755 /usr/local/bin/coreos-installer
+          coreos-installer --version
 
-      - name: Build installer ISO (amd64)
-        if: steps.release-check.outputs.skip_upload != 'true'
-        run: |
-          chmod +x ./scripts/build-iso.sh
-          ./scripts/build-iso.sh --channel stable --arch amd64 \
-            --binary ./knuckle-linux-amd64
-          cp output/knuckle-installer-stable-amd64.iso .
-          sha256sum knuckle-installer-stable-amd64.iso \
-            > knuckle-installer-stable-amd64.iso.sha256
-
-      - name: Generate SBOM (SPDX)
-        if: steps.release-check.outputs.skip_upload != 'true'
-        run: |
-          syft knuckle-linux-amd64 \
-            --output spdx-json=knuckle-linux-amd64.spdx.json \
-            --source-name knuckle \
-            --source-version "${GITHUB_REF_NAME}"
-
-      - name: Sign artifacts with cosign (keyless, Sigstore)
-        if: steps.release-check.outputs.skip_upload != 'true'
-        run: |
-          cosign sign-blob --yes \
-            --bundle knuckle-linux-amd64.bundle \
-            knuckle-linux-amd64
-          cosign sign-blob --yes \
-            --bundle knuckle-installer-stable-amd64.iso.bundle \
-            knuckle-installer-stable-amd64.iso
-          cosign sign-blob --yes \
-            --bundle knuckle-linux-amd64.spdx.json.bundle \
-            knuckle-linux-amd64.spdx.json
-
-      - name: Push binary to GHCR and attach SBOM via oras
-        if: steps.release-check.outputs.skip_upload != 'true'
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "${GHCR_TOKEN}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
-
-          # Push binary as OCI artifact
-          DIGEST=$(oras push \
-            --format json \
-            "${IMAGE_REGISTRY}/${IMAGE_NAME}/knuckle-linux-amd64:${GITHUB_REF_NAME}" \
-            knuckle-linux-amd64:application/octet-stream \
-            | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")
-
-          # Attach SBOM as referrer
-          SBOM_DIGEST=$(oras attach \
-            --artifact-type application/vnd.spdx+json \
-            --format json \
-            "${IMAGE_REGISTRY}/${IMAGE_NAME}/knuckle-linux-amd64@${DIGEST}" \
-            knuckle-linux-amd64.spdx.json:application/vnd.spdx+json \
-            | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")
-
-          # Sign both with cosign
-          cosign sign -y "${IMAGE_REGISTRY}/${IMAGE_NAME}/knuckle-linux-amd64@${DIGEST}"
-          cosign sign -y "${IMAGE_REGISTRY}/${IMAGE_NAME}/knuckle-linux-amd64@${SBOM_DIGEST}"
-
-      - name: SLSA provenance attestation
-        if: steps.release-check.outputs.skip_upload != 'true'
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
-        with:
-          subject-path: knuckle-linux-amd64
-
-      - name: Upload amd64 artifacts to draft release
-        if: steps.release-check.outputs.skip_upload != 'true'
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
-        with:
-          draft: true
-          make_latest: "false"
-          generate_release_notes: false
-          files: |
-            knuckle-linux-amd64
-            knuckle-linux-amd64.sha256
-            knuckle-linux-amd64.bundle
-            knuckle-linux-amd64.spdx.json
-            knuckle-linux-amd64.spdx.json.bundle
-            knuckle-installer-stable-amd64.iso
-            knuckle-installer-stable-amd64.iso.sha256
-            knuckle-installer-stable-amd64.iso.bundle
-
-  release-arm64:
-    name: Release (arm64)
-    runs-on: ubuntu-24.04-arm
-    needs: create-release
-    steps:
-      - name: Check release state (arm64)
-        id: release-check
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: build Home Server FCOS installer ISO
         run: |
           set -euo pipefail
-          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            echo "skip_upload=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          chmod +x ./scripts/build-fcos-iso.sh
+          ./scripts/build-fcos-iso.sh \
+            --stream stable \
+            --arch amd64 \
+            --binary ./home-server-installer-linux-amd64
 
-          is_draft=$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq '.isDraft')
-          if [[ "$is_draft" == "true" ]]; then
-            echo "skip_upload=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          cp output/knuckle-fcos-installer-stable-amd64.iso \
+            home-server-installer-${GITHUB_REF_NAME}-amd64.iso
+          sha256sum home-server-installer-${GITHUB_REF_NAME}-amd64.iso \
+            > home-server-installer-${GITHUB_REF_NAME}-amd64.iso.sha256
 
-          assets=$(gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets[].name')
-          missing=()
-          for asset in \
-            knuckle-linux-arm64 \
-            knuckle-linux-arm64.sha256 \
-            knuckle-linux-arm64.bundle \
-            knuckle-linux-arm64.spdx.json \
-            knuckle-linux-arm64.spdx.json.bundle \
-            knuckle-installer-stable-arm64.iso \
-            knuckle-installer-stable-arm64.iso.sha256 \
-            knuckle-installer-stable-arm64.iso.bundle; do
-            echo "$assets" | grep -Fx "$asset" >/dev/null || missing+=("$asset")
-          done
-
-          if (( ${#missing[@]} > 0 )); then
-            echo "Published release ${GITHUB_REF_NAME} is immutable and missing arm64 assets:" >&2
-            printf '  - %s\n' "${missing[@]}" >&2
-            exit 1
-          fi
-
-          echo "Published release already contains all arm64 assets; skipping arm64 build/upload."
-          echo "skip_upload=true" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        if: steps.release-check.outputs.skip_upload != 'true'
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        if: steps.release-check.outputs.skip_upload != 'true'
-        with:
-          go-version: "1.26.6"
-          check-latest: true
-
-      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-        if: steps.release-check.outputs.skip_upload != 'true'
-
-      - uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2
-        if: steps.release-check.outputs.skip_upload != 'true'
-
-      - uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
-        if: steps.release-check.outputs.skip_upload != 'true'
-
-      - name: Build binary
-        if: steps.release-check.outputs.skip_upload != 'true'
+      - name: generate binary SBOM
         run: |
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
-            go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" \
-            -o knuckle-linux-arm64 ./cmd/knuckle
-          sha256sum knuckle-linux-arm64 > knuckle-linux-arm64.sha256
-
-      - name: Install ISO dependencies
-        if: steps.release-check.outputs.skip_upload != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xorriso mtools cpio systemd-boot-efi
-
-      - name: Build installer ISO (arm64)
-        if: steps.release-check.outputs.skip_upload != 'true'
-        run: |
-          chmod +x ./scripts/build-iso.sh
-          ./scripts/build-iso.sh --channel stable --arch arm64 \
-            --binary ./knuckle-linux-arm64
-          cp output/knuckle-installer-stable-arm64.iso .
-          sha256sum knuckle-installer-stable-arm64.iso \
-            > knuckle-installer-stable-arm64.iso.sha256
-
-      - name: Generate SBOM (SPDX)
-        if: steps.release-check.outputs.skip_upload != 'true'
-        run: |
-          syft knuckle-linux-arm64 \
-            --output spdx-json=knuckle-linux-arm64.spdx.json \
-            --source-name knuckle \
+          syft home-server-installer-linux-amd64 \
+            --output spdx-json=home-server-installer-linux-amd64.spdx.json \
+            --source-name home-server-installer \
             --source-version "${GITHUB_REF_NAME}"
 
-      - name: Sign artifacts with cosign (keyless, Sigstore)
-        if: steps.release-check.outputs.skip_upload != 'true'
+      - name: sign release artifacts with cosign
         run: |
           cosign sign-blob --yes \
-            --bundle knuckle-linux-arm64.bundle \
-            knuckle-linux-arm64
+            --bundle home-server-installer-linux-amd64.bundle \
+            home-server-installer-linux-amd64
           cosign sign-blob --yes \
-            --bundle knuckle-installer-stable-arm64.iso.bundle \
-            knuckle-installer-stable-arm64.iso
+            --bundle home-server-installer-${GITHUB_REF_NAME}-amd64.iso.bundle \
+            home-server-installer-${GITHUB_REF_NAME}-amd64.iso
           cosign sign-blob --yes \
-            --bundle knuckle-linux-arm64.spdx.json.bundle \
-            knuckle-linux-arm64.spdx.json
+            --bundle home-server-installer-linux-amd64.spdx.json.bundle \
+            home-server-installer-linux-amd64.spdx.json
 
-      - name: Push binary to GHCR and attach SBOM via oras
-        if: steps.release-check.outputs.skip_upload != 'true'
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "${GHCR_TOKEN}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
-
-          # Push binary as OCI artifact
-          DIGEST=$(oras push \
-            --format json \
-            "${IMAGE_REGISTRY}/${IMAGE_NAME}/knuckle-linux-arm64:${GITHUB_REF_NAME}" \
-            knuckle-linux-arm64:application/octet-stream \
-            | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")
-
-          # Attach SBOM as referrer
-          SBOM_DIGEST=$(oras attach \
-            --artifact-type application/vnd.spdx+json \
-            --format json \
-            "${IMAGE_REGISTRY}/${IMAGE_NAME}/knuckle-linux-arm64@${DIGEST}" \
-            knuckle-linux-arm64.spdx.json:application/vnd.spdx+json \
-            | python3 -c "import json,sys; print(json.load(sys.stdin)['digest'])")
-
-          # Sign both with cosign
-          cosign sign -y "${IMAGE_REGISTRY}/${IMAGE_NAME}/knuckle-linux-arm64@${DIGEST}"
-          cosign sign -y "${IMAGE_REGISTRY}/${IMAGE_NAME}/knuckle-linux-arm64@${SBOM_DIGEST}"
-
-      - name: SLSA provenance attestation
-        if: steps.release-check.outputs.skip_upload != 'true'
+      - name: attest installer binary
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
-          subject-path: knuckle-linux-arm64
+          subject-path: home-server-installer-linux-amd64
 
-      - name: Upload arm64 artifacts to draft release
-        if: steps.release-check.outputs.skip_upload != 'true'
+      - name: publish GitHub release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
-          draft: true
-          make_latest: "false"
-          generate_release_notes: false
+          generate_release_notes: true
+          make_latest: true
           files: |
-            knuckle-linux-arm64
-            knuckle-linux-arm64.sha256
-            knuckle-linux-arm64.bundle
-            knuckle-linux-arm64.spdx.json
-            knuckle-linux-arm64.spdx.json.bundle
-            knuckle-installer-stable-arm64.iso
-            knuckle-installer-stable-arm64.iso.sha256
-            knuckle-installer-stable-arm64.iso.bundle
-
-  publish:
-    name: Publish release
-    runs-on: ubuntu-latest
-    needs:
-      - release-amd64
-      - release-arm64
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - name: Check release state (publish)
-        id: publish-check
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            echo "skip_publish=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          is_draft=$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq '.isDraft')
-          if [[ "$is_draft" == "true" ]]; then
-            echo "skip_publish=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          assets=$(gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets[].name')
-          missing=()
-          for asset in \
-            knuckle-linux-amd64 \
-            knuckle-linux-amd64.sha256 \
-            knuckle-linux-amd64.bundle \
-            knuckle-linux-amd64.spdx.json \
-            knuckle-linux-amd64.spdx.json.bundle \
-            knuckle-installer-stable-amd64.iso \
-            knuckle-installer-stable-amd64.iso.sha256 \
-            knuckle-installer-stable-amd64.iso.bundle \
-            knuckle-linux-arm64 \
-            knuckle-linux-arm64.sha256 \
-            knuckle-linux-arm64.bundle \
-            knuckle-linux-arm64.spdx.json \
-            knuckle-linux-arm64.spdx.json.bundle \
-            knuckle-installer-stable-arm64.iso \
-            knuckle-installer-stable-arm64.iso.sha256 \
-            knuckle-installer-stable-arm64.iso.bundle; do
-            echo "$assets" | grep -Fx "$asset" >/dev/null || missing+=("$asset")
-          done
-
-          if (( ${#missing[@]} > 0 )); then
-            echo "Published release ${GITHUB_REF_NAME} is immutable and missing required assets:" >&2
-            printf '  - %s\n' "${missing[@]}" >&2
-            exit 1
-          fi
-
-          echo "Published release already contains all expected assets; skipping publish."
-          echo "skip_publish=true" >> "$GITHUB_OUTPUT"
-
-      - name: Verify release assets before publish
-        if: steps.publish-check.outputs.skip_publish != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          assets=$(gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets[].name')
-
-          for asset in \
-            knuckle-linux-amd64 \
-            knuckle-linux-amd64.sha256 \
-            knuckle-linux-amd64.bundle \
-            knuckle-linux-amd64.spdx.json \
-            knuckle-linux-amd64.spdx.json.bundle \
-            knuckle-installer-stable-amd64.iso \
-            knuckle-installer-stable-amd64.iso.sha256 \
-            knuckle-installer-stable-amd64.iso.bundle \
-            knuckle-linux-arm64 \
-            knuckle-linux-arm64.sha256 \
-            knuckle-linux-arm64.bundle \
-            knuckle-linux-arm64.spdx.json \
-            knuckle-linux-arm64.spdx.json.bundle \
-            knuckle-installer-stable-arm64.iso \
-            knuckle-installer-stable-arm64.iso.sha256 \
-            knuckle-installer-stable-arm64.iso.bundle; do
-            echo "$assets" | grep -Fx "$asset" >/dev/null || {
-              echo "Missing release asset: $asset" >&2
-              exit 1
-            }
-          done
-
-      - name: Publish draft release
-        if: steps.publish-check.outputs.skip_publish != 'true'
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
-        with:
-          draft: false
-          generate_release_notes: false
+            home-server-installer-linux-amd64
+            home-server-installer-linux-amd64.sha256
+            home-server-installer-linux-amd64.bundle
+            home-server-installer-linux-amd64.spdx.json
+            home-server-installer-linux-amd64.spdx.json.bundle
+            home-server-installer-${{ github.ref_name }}-amd64.iso
+            home-server-installer-${{ github.ref_name }}-amd64.iso.sha256
+            home-server-installer-${{ github.ref_name }}-amd64.iso.bundle

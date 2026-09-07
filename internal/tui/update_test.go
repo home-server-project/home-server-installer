@@ -174,7 +174,7 @@ func TestMaxCursor(t *testing.T) {
 	}{
 		{
 			step:     model.StepWelcome,
-			expected: 2, // Home Server uCore | Home Server uCore HCI
+			expected: len(homeServerImageOptions),
 		},
 		{
 			step: model.StepStorage,

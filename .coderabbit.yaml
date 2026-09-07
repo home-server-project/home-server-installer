@@ -6,53 +6,65 @@ reviews:
   path_instructions:
     - path: "internal/runner/**"
       instructions: |
-        This is the ONLY package allowed to use exec.Command / exec.CommandContext.
-        All external commands must go through the Runner interface. Flag any
-        exec.Command usage outside this package as a critical violation.
+        This is the package that owns external command execution. Flag new direct
+        exec.Command / exec.CommandContext usage outside the established Runner
+        abstraction unless there is a clearly documented reason.
+
     - path: "internal/tui/**"
       instructions: |
-        No business logic in view models — TUI renders, wizard transitions.
-        Flag password hashing, key merging, or config mutations here.
-        Bubble Tea owns stdout — never log to stdout from this package.
+        Keep destructive installation work out of TUI rendering and navigation.
+        The TUI may collect and merge user configuration, including the explicit
+        live public-SSH-key handoff, but disk partitioning, image pulls, signature
+        verification, and bootc installation belong in the install path. Bubble Tea
+        owns the interactive terminal; avoid unrelated stdout logging.
+
     - path: "internal/ignition/**"
       instructions: |
-        All user-supplied values in the Butane template MUST use yamlEscape.
-        Temp Ignition files must be created with O_EXCL, mode 0600, and
-        cleaned up via defer. Flag any unescaped template interpolation.
+        Treat user-supplied values as security-sensitive. Preserve escaping and
+        safe file permissions for generated configuration. Never introduce private
+        SSH-key material. Temporary configuration containing credentials or hashes
+        must be created safely and cleaned up.
+
     - path: "internal/install/**"
       instructions: |
-        Never call flatcar-install or exec directly — all commands must route
-        through the runner.Runner interface. Reboot must be injected via
-        rebootFn, never called directly. Verify DryRunner behaviour is tested.
+        Home Server V1 is a signed direct-install uCore path. Preserve the selected
+        target disk as the only disk that may be partitioned, and preserve target
+        revalidation immediately before destructive operations. Do not weaken image
+        signature verification or broaden trusted repositories accidentally. Home
+        Server Project images and upstream Universal Blue uCore images use separate
+        trust keys. Installer-only services, temporary trust configuration, and
+        scratch state must not persist into the installed system.
+
     - path: "internal/model/**"
       instructions: |
-        Pure data types only — zero imports of other internal packages.
-        This is the leaf package everything depends on. Flag any import
-        of internal/* here.
-    - path: "internal/validate/**"
-      instructions: |
-        Validators must cover both valid and invalid inputs in table-driven
-        tests. New exported functions without corresponding TestXxx fail the
-        coverage gate. Regex patterns must be anchored (^ and $).
-    - path: "internal/headless/**"
-      instructions: |
-        Security-sensitive: headless is the CI/automation path. Validate()
-        must check all user-supplied fields before they reach Ignition.
-        GitHub-fetched SSH keys must be validated before use (validate.SSHPublicKey).
-        Password fields expect pre-hashed values — reject plaintext.
+        Keep this package focused on shared data/state definitions. Avoid adding
+        command execution or destructive installer behavior here.
+
     - path: ".github/workflows/**"
       instructions: |
-        Security-sensitive. Verify actions are pinned by SHA (Renovate
-        manages this). Check for secret exposure in run: blocks. Release
-        workflow must include cosign signing, SBOM, and SLSA provenance.
-        persist-credentials: false required on all checkout steps in
-        elevated-permission jobs.
+        Treat workflow changes as security-sensitive. GitHub Actions should remain
+        pinned by commit SHA where the repository already follows that pattern.
+        Check for secret exposure in run blocks. The V1 public release workflow is
+        amd64 and must build the Fedora CoreOS-based installer through
+        scripts/build-fcos-iso.sh with no embedded private key or personalized SSH
+        key. Preserve Cosign signing, SBOM generation, and provenance for release
+        artifacts where currently configured.
+
+    - path: "scripts/build-fcos-iso.sh"
+      instructions: |
+        This is the Home Server V1 ISO builder. Preserve UEFI boot, use the official
+        Fedora CoreOS artifacts obtained through coreos-installer, keep the Knuckle
+        executable outside the small live-Ignition payload, verify the packaged
+        executable against its SHA256, and preserve the single combined boot initrd
+        ordering. --ssh-key accepts public SSH-key material only; private keys must
+        never be embedded. Public release builds intentionally omit --ssh-key.
+
     - path: "scripts/build-iso.sh"
       instructions: |
-        Must use --efi-boot-part --efi-boot-image for the EFI System
-        Partition (NOT -isohybrid-gpt-basdat). TTYPath in systemd units
-        must be /dev/console. Downloaded artifacts must be SHA512+GPG
-        verified before use.
+        This is inherited Knuckle compatibility infrastructure, not the Home Server
+        V1 release path. Do not redirect Home Server V1 release or testing work back
+        to this script unless that is an explicit design decision.
+
   tools:
     golangci-lint:
       enabled: true

@@ -1,38 +1,47 @@
 name: "Bug report"
-description: "Something is broken. You are the only person who can confirm it."
+description: "Report a problem with Home Server Installer."
 labels: ["type/bug"]
 type: "Bug"
 body:
   - type: markdown
     attributes:
       value: |
-        Run `ujust report` before submitting. It captures your image, kernel, hardware, and logs — paste the gist URL below and we likely have everything we need.
-
-  - type: input
-    id: report-link
-    attributes:
-      label: "ujust report gist URL"
-      placeholder: "https://gist.github.com/..."
-    validations:
-      required: false
+        Please include enough detail to reproduce the problem. For install or disk issues, say whether this was a VM or dedicated test hardware and identify the selected target disk.
 
   - type: textarea
-    id: what-happened
+    id: problem
     attributes:
       label: "What happened?"
-      description: "What did you see? What did you expect? Be specific — hardware model, exact error text, what you were doing."
-      placeholder: |
-        Bluetooth disappears from the panel after suspend on my Framework 13 AMD.
-        The indicator is gone until I reboot. journalctl shows "hci0: Bluetooth host wakeup failed".
-        Expected it to reconnect automatically, as it does on Fedora 42.
+      description: "Describe what you saw and what you expected instead. Include the exact installer step and any error text."
     validations:
       required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: "Test environment"
+      description: "VM or hardware, CPU architecture, firmware/UEFI details, target disk, selected uCore image, and /boot layout when relevant."
+      placeholder: |
+        VM: libvirt/QEMU
+        Architecture: amd64
+        Image: Home Server uCore HCI LTS
+        Target disk: /dev/vda
+        /boot layout: 1 GiB
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: "Logs or screenshots"
+      description: "Paste relevant installer output, /tmp/knuckle.log excerpts, journal output, or screenshots. Remove private information before posting."
+    validations:
+      required: false
 
   - type: textarea
     id: extra
     attributes:
       label: "Extra context"
-      description: "Optional — upstream bug links, 'works on X but not Y', anything that narrows the cause."
-      placeholder: "Works fine on the Intel NUC in the same setup. Appears on both 6.14 and 6.15 kernels."
+      description: "Anything else that may help reproduce or narrow the issue."
     validations:
       required: false

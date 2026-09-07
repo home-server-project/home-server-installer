@@ -253,7 +253,7 @@ func TestMaxCursor_AllSteps(t *testing.T) {
 		disks  int
 		expect int
 	}{
-		{model.StepWelcome, 0, 2}, // Home Server uCore | Home Server uCore HCI
+		{model.StepWelcome, 0, len(homeServerImageOptions)},
 		{model.StepStorage, 3, 3}, // number of disks
 		{model.StepStorage, 0, 0}, // no disks
 		{model.StepSysext, 0, 0},  // empty sysexts

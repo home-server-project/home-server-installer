@@ -1,183 +1,90 @@
-# Contributing to Knuckle
+# Contributing to Home Server Installer
 
-Thanks for contributing! Knuckle is early and pre-alpha — all feedback and PRs are welcome.
+Thanks for contributing to Home Server Installer.
 
-## Where to Start
+This repository is a Home Server Project fork of Project Bluefin Knuckle, adapted for a signed, direct-install uCore workflow.
 
-New to knuckle? Good places to start:
+## Before making changes
 
-- Issues labeled [`good first issue`](https://github.com/projectbluefin/knuckle/issues?q=is%3Aopen+label%3A%22good+first+issue%22) — curated for newcomers
-- **`internal/validate/`** — hostname, CIDR, SSH key, timezone validators; well-isolated, no QEMU needed
-- **Test coverage** — `just cover` shows packages under threshold; adding tests is always welcome
-- **Doc improvements** — typos, clarifications, example fixes (no build tools needed)
+Read:
 
-For larger changes, open an issue first to align on scope before writing code.
+- [README.md](README.md) for current V1 behavior.
+- [docs/TESTING.md](docs/TESTING.md) for the validation workflow.
+- [docs/SECURITY.md](docs/SECURITY.md) for trust and disk-safety rules.
+- [AGENTS.md](AGENTS.md) if you are using an AI coding agent against the repository.
 
-### ARM64 development
+For larger behavioral changes, open an issue first so the scope can be discussed before implementation.
 
-Cross-compile for arm64 with `just build-arm64` — no arm64 hardware needed for compilation or unit tests.
-
-`KNUCKLE_ARCH` defaults to `amd64` in the `Justfile`. Override it when you want `just` recipes to target arm64 instead:
-- **Native arm64 hardware** with KVM: `KNUCKLE_ARCH=arm64 just vm`
-- **QEMU TCG** (slow, x86_64 host): `sudo apt install qemu-system-arm` then `KNUCKLE_ARCH=arm64 just vm`
-- **Other arm64 recipes**: `KNUCKLE_ARCH=arm64 just vm-e2e`, `KNUCKLE_ARCH=arm64 just iso`, `KNUCKLE_ARCH=arm64 just boot-iso`
-
-CI uses native `ubuntu-24.04-arm` runners. TCG emulation is functional but significantly slower.
-
-## Prerequisites
-
-| Tool | Version | Notes |
-|------|---------|-------|
-| [Go](https://go.dev) | 1.26+ | `go version` to check |
-| [just](https://just.systems) | any | `cargo install just` or `brew install just` |
-| QEMU + KVM | any | Optional — required for VM/ISO testing only |
-
-Install QEMU on Ubuntu:
-```bash
-sudo apt install qemu-kvm qemu-system-x86 qemu-system-arm ovmf
-```
-
-## Getting Started
+## Clone
 
 ```bash
-git clone https://github.com/projectbluefin/knuckle
-cd knuckle
-
-# Run the full CI gate (no QEMU needed)
-just ci
+git clone https://github.com/home-server-project/home-server-installer.git
+cd home-server-installer
 ```
 
-`just ci` runs: `go mod tidy` check → `gofmt` → `go vet` → `golangci-lint` → `govulncheck` → `go test -race` → coverage gate → headless e2e.
+## Go development
 
-If you are working on the TUI itself, you can also run the full wizard locally in demo mode after building:
+The project uses Go and keeps CGO disabled for the installer binary.
+
+For the current Home Server-specific path, a useful minimum test set is:
 
 ```bash
-./bin/knuckle --demo
+GOTOOLCHAIN=auto go test ./internal/install ./internal/model ./internal/tui
 ```
 
-`--demo` uses mocked hardware and catalog data, so you can iterate on the TUI without QEMU, network access, or real disks.
-
-If `just ci` passes locally, your change is ready for a PR.
-
-## Optional: VM Testing
+Before submitting Go changes:
 
 ```bash
-just vm          # real install in QEMU, boots installed system after
-just vm-e2e      # 4-pass automated: DHCP, static, docker sysext, NVIDIA
-just boot-iso    # boot installer ISO in QEMU GTK window
+gofmt -w <changed-go-files>
 ```
 
-Requires QEMU/KVM. See [docs/CI-AND-TESTING.md](docs/CI-AND-TESTING.md) for the full test pyramid, and [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common local and CI issues.
+Review the resulting diff before committing formatting changes.
 
-## Submitting a PR
+## Installer and disk changes
 
-1. **Fork** and create a branch from `main`
-2. **Make your change** — keep scope tight; see `## Scope` in the PR template
-3. **Run** `just ci` — it must pass before you open a PR
-4. **Sign commits** — DCO required: `git commit -s`
-5. **Fill out the PR template** — link the issue, check the boxes
+Changes involving any of the following require VM validation, not only unit tests:
 
-```bash
-# Sign a commit
-git commit -s -m "fix(tui): correct tab focus order in StepNetwork"
+- target-disk discovery or validation;
+- partition layout;
+- `bootc install` behavior;
+- image selection or signature verification;
+- primary-user or password provisioning;
+- SSH key provisioning;
+- ISO boot/startup behavior.
 
-# Sign an existing commit
-git commit --amend -s
-```
+Use a disposable VM first. When disk behavior changes, attach a separate sentinel disk and verify that only the selected target disk is modified.
 
-## Code Style
+See [docs/TESTING.md](docs/TESTING.md) for the current test procedure.
 
-- `gofmt` enforced by CI — run `just fmt` before committing
-- `golangci-lint` enforced — run `just lint` to check locally
-- No CGO — keep `CGO_ENABLED=0`
-- New packages go under `internal/` — nothing exported from `internal/` is public API
+## SSH material
 
-## Tests
+Never commit private SSH keys or embed private keys in an installer ISO.
 
-### Test-only environment variables
+The installer and future Builder flow only require SSH **public keys**. Private keys stay on the user's own device.
 
-- `KNUCKLE_TEST_MAIN=1` — internal test helper used by `cmd/knuckle/main_test.go` to make the compiled test binary delegate into `main()`. This is only needed when working on CLI bootstrap and flag-handling tests.
+## Documentation changes
 
-- Unit tests live next to the code: `foo.go` → `foo_test.go`
-- Golden files use `-update`: `go test ./internal/ignition -update` — commit the result deliberately
-- Network-dependent tests go behind `//go:build integration`
-- No `os.Exec` or network calls in unit tests — use `SpyRunner` or `httptest.NewServer`
+If behavior changes, update the relevant documentation in the same change:
 
-### Testing a TUI step
+- `README.md` for product behavior;
+- `CHANGELOG.md` for Home Server-specific milestones;
+- `docs/TESTING.md` for validation changes;
+- `docs/TROUBLESHOOTING.md` for operational fixes;
+- `docs/SECURITY.md` for trust or disk-safety changes;
+- `docs/RELEASE.md` for release requirements.
 
-Most TUI tests stay fast by testing the model directly instead of spinning up a full Bubble Tea program.
+## Pull requests
 
-- Use `newTestWizard()` + `New(w)` to build a model with predictable state for the step you are working on.
-- For command execution, prefer the `SpyRunner` pattern used across `internal/install` and related packages: stub command results with `runner.NewSpyRunner()`, call the code under test, then assert against `spy.Calls` instead of shelling out.
-- For Ignition golden files, regenerate snapshots intentionally with `go test ./internal/ignition -update`, review the `*.golden.json` diff, and commit the updated files only when the new output is expected.
-- Real network or process-behavior tests belong behind the integration build tag:
-  ```go
-  //go:build integration
-  // +build integration
-  ```
-  Run them locally with `go test -tags=integration ./...` when you need the real path; they do not run in normal unit-test passes.
-- `internal/tui/forms_builder_test.go` is the lightweight pattern for form construction tests: seed wizard state, call `build*Form()`, and assert the form is created and preserves important input values. These tests do not need a TTY.
+Keep pull requests focused and describe:
 
-Minimal step test structure:
+- what changed;
+- why it changed;
+- what tests were run;
+- whether VM installation was required and completed;
+- any remaining limitations.
 
-```go
-func TestKeyboard_CtrlB_ReviewTogglesPreview(t *testing.T) {
-	w := newTestWizard()
-	w.State.CurrentStep = model.StepReview
+Do not claim bare-metal behavior from VM testing alone. If dedicated hardware was tested, say exactly what was tested.
 
-	m := New(w)
-	m.activeForm = nil // bypass huh form when you want handleKey()/Update() directly
+## Upstream
 
-	newModel, _ := m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
-	got := newModel.(*Model)
-
-	if !got.showButane {
-		t.Fatal("expected Ctrl+B to enable Butane preview")
-	}
-}
-```
-
-Use this split when adding coverage:
-- state transitions and keyboard handling → step-focused tests such as `keyboard_test.go` or `*_step_test.go`
-- form construction and seeded defaults → `forms_builder_test.go`
-- real external behavior → integration tests with the `integration` build tag
-
-See [docs/CI-AND-TESTING.md](docs/CI-AND-TESTING.md) for coverage gates and the full test pyramid.
-
-## Demo Recording
-
-The `demo/` directory holds the source for the animated demo GIF shown in the README:
-
-- `demo/knuckle-demo.tape` — [VHS](https://github.com/charmbracelet/vhs) script that drives the terminal recording
-- `demo/knuckle-install.cast` — [asciinema](https://asciinema.org/) cast produced by VHS
-- `demo/knuckle-install.gif` — rendered GIF embedded in the README
-
-To regenerate after TUI changes (requires [VHS](https://github.com/charmbracelet/vhs)):
-
-```bash
-vhs demo/knuckle-demo.tape
-```
-
-The GIF and cast are committed so contributors can preview them without re-running VHS.
-
-## Architecture Overview
-
-```
-cmd/knuckle/     → entrypoint, flag parsing
-internal/tui/    → Bubble Tea step models (one per wizard step)
-internal/wizard/ → step state machine, navigation, validation gates
-internal/install/→ flatcar-install orchestration
-internal/headless/ → --headless --config path (mirrors TUI)
-internal/ignition/ → Butane assembly + in-process compilation
-```
-
-Full architecture in [README.md#architecture](README.md#architecture).
-
-## Security Issues
-
-Do **not** open a public issue for vulnerabilities. Use [GitHub Security Advisories](https://github.com/projectbluefin/knuckle/security/advisories) instead. See [docs/SECURITY.md](docs/SECURITY.md).
-
-## Community
-
-- [Flatcar on Discord](https://flatcar.org/discord)
-- [Issues](https://github.com/projectbluefin/knuckle/issues) for bugs and feature requests
+The original project is [Project Bluefin Knuckle](https://github.com/projectbluefin/knuckle). Useful upstream fixes can still be reviewed and adapted when they fit the Home Server Installer architecture.

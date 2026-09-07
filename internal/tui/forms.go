@@ -207,10 +207,8 @@ func (m *Model) buildTailscaleForm() *huh.Form {
 func (m *Model) buildReviewForm() *huh.Form {
 	cfg := &m.Wizard.State.Config
 	title := "⚠️  DESTRUCTIVE OPERATION — Install Flatcar to disk?"
-	if cfg.HomeServerImage == model.HomeServerUCoreHCIImage {
-		title = "⚠️  DESTRUCTIVE OPERATION — Install Home Server uCore HCI to disk?"
-	} else if cfg.HomeServerImage == model.HomeServerUCoreImage {
-		title = "⚠️  DESTRUCTIVE OPERATION — Install Home Server uCore to disk?"
+	if cfg.HomeServerImage != "" {
+		title = fmt.Sprintf("⚠️  DESTRUCTIVE OPERATION — Install %s to disk?", installTargetDisplayName(cfg))
 	} else if cfg.OS == model.OSFCOS {
 		title = "⚠️  DESTRUCTIVE OPERATION — Install Fedora CoreOS to disk?"
 	}
@@ -354,11 +352,11 @@ func (m *Model) renderZenChrome() string {
 	b.WriteString("\n\n")
 
 	// Logo: spaced letterform in double-line frame
-	b.WriteString(logoLo.Render("\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557"))
+	b.WriteString(logoLo.Render("╔══════════════════════════════════════════════════════════╗"))
 	b.WriteString("\n")
-	b.WriteString(logoLo.Render("\u2551") + "     " + logoHi.Render("K N U C K L E") + "                                        " + logoLo.Render("\u2551"))
+	b.WriteString(logoLo.Render("║") + "     " + logoHi.Render("K N U C K L E") + "                                        " + logoLo.Render("║"))
 	b.WriteString("\n")
-	b.WriteString(logoLo.Render("\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d"))
+	b.WriteString(logoLo.Render("╚══════════════════════════════════════════════════════════╝"))
 	b.WriteString("\n")
 
 	// Subtitle + slogan
@@ -379,11 +377,11 @@ func (m *Model) renderZenChrome() string {
 			for _, ch := range m.Wizard.State.Channels {
 				if ch.Channel == cfg.Channel {
 					verInfo = accentColor.Render(ch.Channel) +
-						dimColor.Render(" \u2502 ") +
+						dimColor.Render(" │ ") +
 						infoColor.Render("v"+ch.Version) +
-						dimColor.Render(" \u2502 ") +
+						dimColor.Render(" │ ") +
 						infoColor.Render("linux "+ch.Kernel) +
-						dimColor.Render(" \u2502 ") +
+						dimColor.Render(" │ ") +
 						infoColor.Render("systemd "+ch.Systemd)
 					break
 				}
@@ -397,15 +395,15 @@ func (m *Model) renderZenChrome() string {
 		b.WriteString(verInfo)
 
 		if len(m.Wizard.State.SystemChecks) > 0 {
-			b.WriteString(dimColor.Render("  \u2502  "))
+			b.WriteString(dimColor.Render("  │  "))
 			for i, check := range m.Wizard.State.SystemChecks {
 				switch check.Status {
 				case "ok":
-					b.WriteString(okDot.Render("\u25cf"))
+					b.WriteString(okDot.Render("●"))
 				case "warn":
-					b.WriteString(warnDot.Render("\u25cf"))
+					b.WriteString(warnDot.Render("●"))
 				default:
-					b.WriteString(failDot.Render("\u25cf"))
+					b.WriteString(failDot.Render("●"))
 				}
 				if i < len(m.Wizard.State.SystemChecks)-1 {
 					b.WriteString(" ")
@@ -421,14 +419,14 @@ func (m *Model) renderZenChrome() string {
 	b.WriteString("  ")
 	for i := 0; i < steps; i++ {
 		if i < current {
-			b.WriteString(accentColor.Render("\u2501\u2501"))
+			b.WriteString(accentColor.Render("━━"))
 		} else if i == current {
-			b.WriteString(logoHi.Render("\u2501\u2501"))
+			b.WriteString(logoHi.Render("━━"))
 		} else {
-			b.WriteString(dimColor.Render("\u2500\u2500"))
+			b.WriteString(dimColor.Render("──"))
 		}
 		if i < steps-1 {
-			b.WriteString(dimColor.Render("\u00b7"))
+			b.WriteString(dimColor.Render("·"))
 		}
 	}
 	b.WriteString("\n\n")
@@ -615,7 +613,21 @@ func (m *Model) viewChannelCards() string {
 	return b.String()
 }
 
-// viewOSPicker renders two OS selection cards: Flatcar Container Linux and Fedora CoreOS.
+type homeServerImageOption struct {
+	id   string
+	name string
+	desc string
+}
+
+var homeServerImageOptions = []homeServerImageOption{
+	{model.HomeServerUCoreImage, "Home Server uCore LTS", "Recommended Home Server Project image. Small downstream of Universal Blue uCore."},
+	{model.HomeServerUCoreHCIImage, "Home Server uCore HCI LTS", "Home Server Project virtualization/HCI image for libvirt/QEMU hosts."},
+	{model.UpstreamUCoreMinimalImage, "uCore Minimal LTS", "Upstream Universal Blue lightweight image for containers and virtual machines."},
+	{model.UpstreamUCoreImage, "uCore LTS", "Upstream Universal Blue image for bare-metal and storage server workloads."},
+	{model.UpstreamUCoreHCIImage, "uCore HCI LTS", "Upstream Universal Blue image with libvirt/KVM virtualization tooling."},
+}
+
+// viewOSPicker renders the supported signed LTS uCore destination images.
 func (m *Model) viewOSPicker() string {
 	var b strings.Builder
 
@@ -633,20 +645,11 @@ func (m *Model) viewOSPicker() string {
 	nameNormal := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("255"))
 	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true)
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
 	b.WriteString("  Select Home Server image:\n\n")
 
-	type osOption struct {
-		id   string
-		name string
-		desc string
-	}
-	options := []osOption{
-		{model.HomeServerUCoreImage, "Home Server uCore", "Standard Home Server image. Small downstream of Universal Blue uCore."},
-		{model.HomeServerUCoreHCIImage, "Home Server uCore HCI", "Virtualization/HCI image for libvirt/QEMU home-server hosts."},
-	}
-
-	for i, opt := range options {
+	for i, opt := range homeServerImageOptions {
 		selected := i == m.cursor
 
 		cursor := "  "
@@ -668,7 +671,8 @@ func (m *Model) viewOSPicker() string {
 		b.WriteString("\n")
 	}
 
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	b.WriteString("\n")
+	b.WriteString(dim.Render("  All installer choices use LTS. Switch to stable/NVIDIA later with bootc."))
 	b.WriteString("\n")
 	b.WriteString(dim.Render("  ↑↓/jk select · enter continue"))
 	b.WriteString("\n")

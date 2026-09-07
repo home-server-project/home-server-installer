@@ -1,190 +1,105 @@
 # Troubleshooting
 
-Common failure modes for knuckle installs and first boot.
+This guide covers the current Home Server Installer V1 path.
 
-## 0) Quick data to collect before rebooting
+## Installer does not appear
 
-Run these from the installer shell:
+V1 is UEFI-only. Make sure the VM or test machine is booting the installer ISO in UEFI mode.
 
-```bash
-knuckle --version
-lsblk -o NAME,SIZE,TYPE,MODEL,SERIAL
-ip -br a
-cat /tmp/knuckle.log
-```
+If the Fedora CoreOS live environment boots but the TUI does not appear immediately, wait for the live system to finish starting. The Home Server Installer service runs on `tty1`.
 
-If you are in a booted installed system, collect:
+From another shell, useful checks are:
 
 ```bash
-cat /etc/os-release
-journalctl -u sshd -b --no-pager | tail -100
-journalctl -u systemd-networkd -b --no-pager | tail -100
-journalctl -b --no-pager | tail -200
+sudo systemctl status home-server-installer.service --no-pager
+sudo journalctl -u home-server-installer.service -b --no-pager
 ```
 
-## 1) Installer hangs or does not start
+## Target disk is missing
 
-### Symptom
+Check what the live system sees:
 
-- USB boots, but the installer never appears.
-- Boot stalls around disk/GPT probing.
+```bash
+lsblk -o NAME,SIZE,TYPE,MODEL,SERIAL,MOUNTPOINTS
+ls -l /dev/disk/by-id/ 2>/dev/null
+```
 
-### Checks and fixes
+The installer prefers stable disk identity when available. Some VM disks do not expose useful `/dev/disk/by-id` entries; in that case the installer may fall back to the raw virtio device path.
 
-1. **Use UEFI mode** (knuckle ISO is systemd-boot, UEFI-only).
-2. Re-write the USB in raw/DD mode.
-3. At the systemd-boot menu, press `e` and ensure the kernel command line includes:
+## Installation appears to pause around image deployment
+
+The signed container image must be downloaded and deployed before the installation can finish. Progress may remain at roughly the same percentage for several minutes while this happens.
+
+Do not power off or reboot simply because the percentage has not moved for a while.
+
+## Installation fails
+
+Before rebooting the live environment, collect:
+
+```bash
+cat /tmp/knuckle.log 2>/dev/null || true
+sudo journalctl -u home-server-installer.service -b --no-pager
+lsblk -o NAME,SIZE,FSTYPE,TYPE,MODEL,SERIAL,MOUNTPOINTS
+```
+
+If reporting a problem, include the selected image, selected disk, selected `/boot` layout, and the relevant installer log output.
+
+## First boot: SSH host key changed
+
+If the same IP address was previously used by the live installer or an older installation, SSH may report:
 
 ```text
-systemd.gpt_auto=0
+REMOTE HOST IDENTIFICATION HAS CHANGED!
 ```
 
-Knuckle's ISO entries already include this flag; adding it manually helps when firmware overrides boot options.
-If your hardware only supports legacy BIOS/CSM, use the upstream Flatcar installation path instead of knuckle's ISO.
-
-## 2) Target disk missing in Storage step
-
-### Symptom
-
-- Storage step is empty, or the expected target disk is missing.
-
-### Checks and fixes
+A fresh installation generates a fresh SSH host identity. If you know this is the machine you just reinstalled, remove the stale client entry and reconnect:
 
 ```bash
-lsblk -o NAME,SIZE,TYPE,MODEL,SERIAL
-ls -l /dev/disk/by-id/
+ssh-keygen -R <IP>
+ssh <user>@<IP>
 ```
 
-- Use `/dev/disk/by-id/...` disk paths whenever available (stable identity).
-- Avoid relying on `/dev/sdX` ordering.
-- In some VM environments, `/dev/disk/by-id/` can be empty for virtio disks with no serials. In that case, use the visible `/dev/vdX` path for that environment only.
-- For unattended installs, validate config first:
+Verify and accept the new host fingerprint when prompted.
+
+## First boot: public-key login fails
+
+The installer writes the configured public SSH key into the installed user's authorized keys.
+
+If the matching private key is loaded in `ssh-agent`, is in a normal default SSH identity location, or is configured in the SSH client, plain SSH should work:
 
 ```bash
-knuckle --headless --config install.json --dry-run
+ssh <user>@<IP>
 ```
 
-See [HEADLESS-CONFIG.md](HEADLESS-CONFIG.md) for the schema.
-
-## 3) Install step fails (`flatcar-install` error)
-
-### Symptom
-
-- Install step exits with an error.
-- Wizard reports failure before reboot.
-
-### Checks and fixes
-
-1. Review knuckle log:
+If the private key uses a custom filename and is not loaded in an agent, specify it explicitly:
 
 ```bash
-cat /tmp/knuckle.log
+ssh -i ~/.ssh/<private-key> <user>@<IP>
 ```
 
-2. Validate your config without writing disk:
+The filename of the public `.pub` file used during ISO creation does not affect server-side authorization; the public-key contents are what matter.
+
+## First boot: check the installed system
+
+Useful basic checks:
 
 ```bash
-knuckle --headless --config install.json --dry-run
+sudo bootc status
+sudo systemctl --failed --no-pager
+lsblk -f
 ```
 
-3. For local VM reproduction, use repository recipes:
+For SSH-key troubleshooting:
 
 ```bash
-just vm
-just vm-e2e
+ls -ld ~/.ssh
+ls -l ~/.ssh/authorized_keys
 ```
 
-## 4) First boot: SSH login fails
+## Secure Boot
 
-### Symptom
+Secure Boot must be disabled during the current V1 installation path. After installation, follow the current [uCore documentation](https://github.com/ublue-os/ucore) if you want to configure or enable Secure Boot.
 
-- `ssh core@<ip>` returns `Permission denied` or `Connection refused`.
+## Testing safety
 
-### Checks and fixes (from local console on installed system)
-
-```bash
-hostname
-ip -br a
-systemctl status sshd --no-pager
-journalctl -u sshd -b --no-pager | tail -100
-ls -lah /home/core/.ssh/authorized_keys
-```
-
-- Default user is `core` unless you configured another user.
-- If key auth fails, verify the expected public key is present in `authorized_keys`.
-
-## 5) First boot: network is down or wrong
-
-### Checks (from installed system console)
-
-```bash
-networkctl status --no-pager
-journalctl -u systemd-networkd -b --no-pager | tail -120
-ls -lah /etc/systemd/network/
-```
-
-- Re-check static config values (interface, CIDR, gateway, DNS) if not using DHCP.
-
-## 6) First boot: Ignition settings missing
-
-### Symptom
-
-- Hostname, SSH keys, or other expected config did not apply.
-
-### Checks
-
-```bash
-hostname
-journalctl -b -u 'ignition*' --no-pager | tail -200
-ls -lah /home/core/.ssh/authorized_keys
-```
-
-If generation failed before install, rerun with `--dry-run` and inspect `/tmp/knuckle.log`.
-
-## 7) VM/ghost lab constraints (contributors)
-
-Use these when troubleshooting CI-style test environments:
-
-- `just vm` / `just e2e` require a local display.
-- Ghost is headless; use `just vm-e2e` or `./scripts/qa-test-pr.sh <PR>`.
-- QEMU hostfwd on ghost binds `127.0.0.1` on ghost, so SSH to VM must be issued from ghost:
-
-```bash
-ssh jorge@ghost "ssh -o StrictHostKeyChecking=no -p 2307 core@127.0.0.1 'uname -r'"
-```
-
-- Known limitation: non-interactive ghost sessions can fail TUI tests with `open /dev/tty: no such device or address` (see issue [#512](https://github.com/projectbluefin/knuckle/issues/512)).
-
-## 8) Recovering a host node accidentally provisioned with a knuckle Ignition config
-
-If a bare-metal k3s node was previously provisioned with a knuckle Ignition config that included the swap feature, it may have `knuckle-create-swapfile.service` and `var-swapfile.swap` written into `/etc/systemd/system/` on the host. These units belong only inside ephemeral KubeVirt test VMs.
-
-Symptoms: `var-swapfile.swap` fails at boot (because `knuckle-create-swapfile.service` is absent or already ran), and `/var/swapfile` occupies disk space.
-
-Recovery (run from a privileged shell or via `kubectl debug node/<node>`):
-
-```bash
-systemctl stop var-swapfile.swap || true
-systemctl disable var-swapfile.swap || true
-rm -f /etc/systemd/system/var-swapfile.swap
-rm -f /etc/systemd/system/multi-user.target.wants/var-swapfile.swap
-rm -f /etc/systemd/system/knuckle-create-swapfile.service
-rm -f /var/swapfile
-systemctl daemon-reload
-```
-
-Verify with:
-```bash
-find /etc/systemd/system/ -name '*knuckle*' -o -name '*swap*'  # expect empty
-swapon --show                                                    # expect empty
-```
-
-## 9) Still stuck?
-
-Open an issue with:
-
-- knuckle version (`knuckle --version`)
-- target architecture (`uname -m`)
-- whether install was interactive wizard or headless JSON
-- relevant output from `/tmp/knuckle.log`
-- first-boot journal excerpts (`journalctl -b --no-pager | tail -200`)
+VM testing is recommended first. For bare-metal testing, use a dedicated test drive or hardware where the selected installation disk can be safely erased, and keep backups of anything important.
