@@ -8,8 +8,12 @@ usage: fcos-iso-smoke.sh <iso-path> <ovmf-path> [timeout-seconds]
 Boot a Home Server FCOS installer ISO headlessly with QEMU and verify that:
 - UEFI/systemd-boot reaches the FCOS live environment
 - the separate Knuckle initrd pre-pivot hook copies the payload into the live root
-- home-server-installer.service is started after pivot
+- Ignition applies the live installer configuration
+- the FCOS live system reaches a login prompt on the serial console
 - no payload/hash bootstrap failure is logged
+
+The Home Server Installer service itself owns tty1, so this headless smoke test
+must not require its start message to appear on ttyS0.
 EOF
 }
 
@@ -64,7 +68,8 @@ printf 'Log: %s\n\n' "$SERIAL_LOG"
 QEMU_PID=$!
 
 hook_seen=0
-service_seen=0
+ignition_seen=0
+login_seen=0
 
 deadline=$((SECONDS + TIMEOUT_SECONDS))
 while (( SECONDS < deadline )); do
@@ -80,12 +85,17 @@ while (( SECONDS < deadline )); do
       hook_seen=1
     fi
 
-    if (( service_seen == 0 )) && log_has 'Started .*Home Server Installer|Started home-server-installer\.service'; then
-      echo '  OK: home-server-installer.service started'
-      service_seen=1
+    if (( ignition_seen == 0 )) && log_has 'Ignition: user-provided config was applied'; then
+      echo '  OK: live Ignition configuration applied'
+      ignition_seen=1
     fi
 
-    if (( hook_seen == 1 && service_seen == 1 )); then
+    if (( login_seen == 0 )) && log_has 'localhost login:'; then
+      echo '  OK: FCOS live system reached serial login prompt'
+      login_seen=1
+    fi
+
+    if (( hook_seen == 1 && ignition_seen == 1 && login_seen == 1 )); then
       echo
       echo 'PASS: FCOS installer ISO boot smoke'
       exit 0
@@ -101,7 +111,7 @@ done
 
 echo
 echo "FAIL: FCOS ISO smoke did not observe all required boot markers"
-echo "  hook_seen=$hook_seen service_seen=$service_seen"
+echo "  hook_seen=$hook_seen ignition_seen=$ignition_seen login_seen=$login_seen"
 echo '--- serial log tail ---'
 tail -100 "$SERIAL_LOG" || true
 exit 1
