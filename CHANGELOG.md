@@ -80,8 +80,8 @@ Verified results:
 
 ### Still to validate end-to-end
 - Validate the SSH-key-only path with a blank password and confirm the intended `NOPASSWD` sudo rule on the finished machine.
-- Continue bare-metal validation only on dedicated test hardware before considering any real home-server or production use.
+- Continue bare-metal validation on a dedicated test drive or test hardware where the selected installation disk can be safely erased.
 
 ### Notes
 - Installation progress may remain around 20% for several minutes while the container image is downloaded and deployed. This is expected; do not power off or reboot during this stage.
-- V1 is working in disposable VM testing, but testing on dedicated hardware should be treated as the next validation stage. Avoid real home servers or production systems until that testing is complete.
+- V1 is working in end-to-end VM testing. VM testing is recommended first; for bare-metal testing, use a dedicated test drive or hardware where the selected installation disk can be safely erased, and keep backups of anything important.
