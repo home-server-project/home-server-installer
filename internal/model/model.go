@@ -61,8 +61,8 @@ const (
 // The installer intentionally exposes only LTS targets. Users who need a
 // stable/NVIDIA variant can bootc switch after installation.
 const (
-	HomeServerUCoreImage    = "ghcr.io/home-server-project/home-server-ucore:lts"
-	HomeServerUCoreHCIImage = "ghcr.io/home-server-project/home-server-ucore-hci:lts"
+	HomeServerUCoreImage      = "ghcr.io/home-server-project/home-server-ucore:lts"
+	HomeServerUCoreHCIImage   = "ghcr.io/home-server-project/home-server-ucore-hci:lts"
 	UpstreamUCoreMinimalImage = "ghcr.io/ublue-os/ucore-minimal:lts"
 	UpstreamUCoreImage        = "ghcr.io/ublue-os/ucore:lts"
 	UpstreamUCoreHCIImage     = "ghcr.io/ublue-os/ucore-hci:lts"
