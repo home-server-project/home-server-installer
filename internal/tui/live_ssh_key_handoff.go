@@ -52,7 +52,7 @@ func publicSSHKeyLines(contents string) []string {
 	var keys []string
 	for _, line := range strings.Split(contents, "\n") {
 		key := strings.TrimSpace(line)
-		if !(strings.HasPrefix(key, "ssh-") || strings.HasPrefix(key, "ecdsa-") || strings.HasPrefix(key, "sk-")) {
+		if !strings.HasPrefix(key, "ssh-") && !strings.HasPrefix(key, "ecdsa-") && !strings.HasPrefix(key, "sk-") {
 			continue
 		}
 		if _, ok := seen[key]; ok {
