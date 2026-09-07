@@ -70,12 +70,25 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 				"bootc install to-filesystem",
 				"--root-mount-spec",
 				"--boot-mount-spec",
+				"useradd --root \"$DEPLOY\"",
+				"PERSISTENT_HOME_ROOT=\"${TARGET_ROOT}/ostree/deploy/fedora-coreos/var/home\"",
+				"authorized_keys was not written to persistent user home",
+				"obsolete first-boot provisioning service remains in target",
 				"systemctl --root=\"$DEPLOY\" mask zincati.service",
 				"systemctl --root=\"$DEPLOY\" enable rpm-ostreed-automatic.timer",
 				"bootc install finalize",
 			} {
 				if !strings.Contains(call.Input, required) {
 					t.Fatalf("direct install script missing %q", required)
+				}
+			}
+			for _, forbidden := range []string{
+				"home-server-provision-user.service\n[Unit]",
+				"ExecStart=/etc/home-server-installer/provision-user.sh",
+				"systemctl --root=\"$DEPLOY\" enable home-server-provision-user.service",
+			} {
+				if strings.Contains(call.Input, forbidden) {
+					t.Fatalf("direct install script still contains obsolete first-boot mechanism %q", forbidden)
 				}
 			}
 		})
