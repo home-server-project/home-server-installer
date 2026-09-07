@@ -1,14 +1,13 @@
 # Home Server Installer
 
 > [!WARNING]
-> **In development. This installer is destructive and testing-first.**
+> **V1 — VM testing is recommended first.**
 >
-> - **VM testing is preferred** while V1 is still being validated.
-> - Bare-metal testing should be limited to **dedicated test hardware with no important data**.
-> - **Do not use it on a real home server or production server yet.** The selected target disk is erased.
+> - For bare-metal testing, use a **dedicated test drive or hardware where the selected installation disk can be safely erased**, and keep backups of anything important.
+> - The installer provides **target-disk selection**, **1 GiB / 2 GiB `/boot` layout selection**, **local password setup**, and **SSH key configuration**.
+> - The installer erases and repartitions **only the selected target disk**; all installer-created partitions are placed on that selected drive.
 > - **UEFI only** for the current V1 path.
-> - V1 installs to a **single target disk**.
-> - **Secure Boot is not a supported V1 real-hardware path** yet.
+> - **Secure Boot must be disabled during installation.** After installation, follow the current [uCore Secure Boot instructions](https://github.com/ublue-os/ucore) if you want to enable Secure Boot.
 
 Home Server Installer is a friendly Fedora CoreOS-based installer for [Home Server uCore](https://github.com/home-server-project/home-server-ucore) and selected upstream [Universal Blue uCore](https://github.com/ublue-os/ucore) images.
 
@@ -61,7 +60,7 @@ Only supported repositories are accepted by the Home Server path. Unknown image 
 
 ## Storage layout
 
-V1 uses a direct Home Server storage layout:
+V1 uses a direct Home Server storage layout on the user-selected target disk:
 
 - 1 MiB BIOS boot partition.
 - 512 MiB EFI System Partition.
@@ -72,7 +71,7 @@ V1 uses a direct Home Server storage layout:
 
 The selected target disk is revalidated immediately before destructive partitioning, including device identity, expected size, serial when available, and mounted-filesystem checks.
 
-Clean VM testing has also verified that a separate attached non-target sentinel disk remains untouched during installation. Real-hardware testing is still intentionally limited to dedicated test systems.
+Clean VM testing has also verified that a separate attached non-target sentinel disk remains untouched during installation. Bare-metal testing can follow on a dedicated test drive or test hardware where the selected installation disk can be safely erased.
 
 ## User and SSH access
 
@@ -107,6 +106,8 @@ Related projects:
 
 ## Status
 
-**V1 is working in disposable VM testing but is not ready for a real home server or production server.**
+**V1 is working in end-to-end VM testing.**
 
-The current direct-install path has completed end-to-end VM installation and first boot with both a Home Server Project target and an upstream Universal Blue uCore target. Dedicated test-hardware validation can follow after the VM path is considered stable enough; production/home-server use remains out of scope for now.
+The current direct-install path has successfully completed installation and first boot with both Home Server Project and upstream Universal Blue uCore targets.
+
+VM testing is recommended first. Bare-metal testing can be done on a **dedicated test drive or test hardware where the selected installation disk can be safely erased**. Keep backups of any important data before testing.
