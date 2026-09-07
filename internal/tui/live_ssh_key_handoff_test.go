@@ -46,18 +46,61 @@ func TestPublicSSHKeyLinesFiltersAndDeduplicates(t *testing.T) {
 		"ssh-ed25519 AAAA one@example",
 		"ssh-ed25519 AAAA one@example",
 		"ecdsa-sha2-nistp256 BBBB two@example",
+		"sk-ssh-ed25519@openssh.com CCCC three@example",
 		"not-a-key",
 		"",
 	}, "\n")
 
 	keys := publicSSHKeyLines(input)
-	if len(keys) != 2 {
-		t.Fatalf("got %d keys, want 2: %v", len(keys), keys)
+	if len(keys) != 3 {
+		t.Fatalf("got %d keys, want 3: %v", len(keys), keys)
 	}
 	if keys[0] != "ssh-ed25519 AAAA one@example" {
 		t.Fatalf("first key = %q", keys[0])
 	}
 	if keys[1] != "ecdsa-sha2-nistp256 BBBB two@example" {
 		t.Fatalf("second key = %q", keys[1])
+	}
+	if keys[2] != "sk-ssh-ed25519@openssh.com CCCC three@example" {
+		t.Fatalf("third key = %q", keys[2])
+	}
+}
+
+func TestHomeServerKeysSummaryFor(t *testing.T) {
+	tests := []struct {
+		name        string
+		builderKeys []string
+		localKeys   []string
+		want        string
+	}{
+		{
+			name:        "builder and local",
+			builderKeys: []string{"ssh-ed25519 AAAA builder"},
+			localKeys:   []string{"ssh-ed25519 BBBB local1", "ssh-ed25519 CCCC local2"},
+			want:        "Builder SSH key detected; 2 additional local key(s) will also be included automatically",
+		},
+		{
+			name:        "builder only",
+			builderKeys: []string{"ssh-ed25519 AAAA builder"},
+			want:        "Builder SSH key detected — it will be installed automatically",
+		},
+		{
+			name:      "local only",
+			localKeys: []string{"ssh-ed25519 BBBB local"},
+			want:      "1 local key(s) from ~/.ssh/ will be included automatically",
+		},
+		{
+			name: "none",
+			want: "No automatic SSH keys detected; add a GitHub username or paste a public key if desired",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := homeServerKeysSummaryFor(tc.builderKeys, tc.localKeys)
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("summary = %q, want substring %q", got, tc.want)
+			}
+		})
 	}
 }
