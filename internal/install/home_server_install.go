@@ -296,6 +296,17 @@ else
     rm -f "$SUDOERS_FILE"
 fi
 
+# Persist the Home Server update intent through systemd's first-boot preset
+# pass. This mirrors the proven legacy direct-bootc installer behavior: the
+# specific 00-home-server rule wins before Fedora's 99-default-disable preset.
+PRESET_FILE="${DEPLOY}/etc/systemd/system-preset/00-home-server.preset"
+mkdir -p "${DEPLOY}/etc/systemd/system-preset"
+cat > "$PRESET_FILE" <<'EOF_PRESET'
+disable zincati.service
+enable rpm-ostreed-automatic.timer
+EOF_PRESET
+chmod 0644 "$PRESET_FILE"
+
 # /home points to /var/home at runtime. For an OSTree deployment, the real
 # persistent /var is the stateroot var directory, not ${DEPLOY}/var. A fresh
 # --skip-finalize deployment may not contain /var/home yet, so create it here.
@@ -435,11 +446,12 @@ rm -rf "$PODMAN_SCRATCH" "$IMAGE_TMP"
 
 bootc install finalize "$TARGET_ROOT"
 
-# Apply and verify update policy against the finalized deployment. Pre-finalize
-# systemd enablement is not durable across bootc finalize on this image.
+# Apply and verify update policy against the finalized deployment. The
+# persistent preset is essential because the first boot performs preset-all
+# and Fedora's vendor fallback is "disable *".
 systemctl --root="$DEPLOY" disable zincati.service || true
 systemctl --root="$DEPLOY" mask zincati.service
-systemctl --root="$DEPLOY" enable rpm-ostreed-automatic.timer
+systemctl --root="$DEPLOY" preset rpm-ostreed-automatic.timer
 
 [[ "$(systemctl --root="$DEPLOY" is-enabled zincati.service 2>/dev/null || true)" == "masked" ]] || {
     echo "zincati is not masked in finalized target" >&2
@@ -447,6 +459,22 @@ systemctl --root="$DEPLOY" enable rpm-ostreed-automatic.timer
 }
 [[ "$(systemctl --root="$DEPLOY" is-enabled rpm-ostreed-automatic.timer 2>/dev/null || true)" == "enabled" ]] || {
     echo "rpm-ostreed-automatic.timer is not enabled in finalized target" >&2
+    exit 1
+}
+[[ -f "$PRESET_FILE" ]] || {
+    echo "Home Server update preset did not survive bootc finalize" >&2
+    exit 1
+}
+[[ "$(stat -c %a "$PRESET_FILE")" == "644" ]] || {
+    echo "Home Server update preset has wrong permissions" >&2
+    exit 1
+}
+grep -Fxq "disable zincati.service" "$PRESET_FILE" || {
+    echo "Home Server update preset is missing Zincati policy" >&2
+    exit 1
+}
+grep -Fxq "enable rpm-ostreed-automatic.timer" "$PRESET_FILE" || {
+    echo "Home Server update preset is missing rpm-ostree timer policy" >&2
     exit 1
 }
 
