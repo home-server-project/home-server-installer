@@ -71,7 +71,10 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 				"--root-mount-spec",
 				"--boot-mount-spec",
 				"useradd --root \"$DEPLOY\"",
-				"PERSISTENT_HOME_ROOT=\"${TARGET_ROOT}/ostree/deploy/fedora-coreos/var/home\"",
+				"PERSISTENT_VAR_ROOT=\"${TARGET_ROOT}/ostree/deploy/fedora-coreos/var\"",
+				"install -d -m0755 \"$PERSISTENT_HOME_ROOT\"",
+				"HOME_ROOT_CONTEXT=\"$(matchpathcon -n \"/var/home\")\"",
+				"persistent /var/home has wrong SELinux context",
 				"authorized_keys was not written to persistent user home",
 				"obsolete first-boot provisioning service remains in target",
 				"systemctl --root=\"$DEPLOY\" mask zincati.service",
@@ -83,6 +86,7 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 				}
 			}
 			for _, forbidden := range []string{
+				"persistent target /var/home is missing",
 				"home-server-provision-user.service\n[Unit]",
 				"ExecStart=/etc/home-server-installer/provision-user.sh",
 				"systemctl --root=\"$DEPLOY\" enable home-server-provision-user.service",
