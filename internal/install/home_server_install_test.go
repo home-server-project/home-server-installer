@@ -71,20 +71,32 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 				"--root-mount-spec",
 				"--boot-mount-spec",
 				"useradd --root \"$DEPLOY\"",
+				"SUDOERS_FILE=\"${DEPLOY}/etc/sudoers.d/90-home-server-admin\"",
+				"NOPASSWD: ALL",
 				"PERSISTENT_VAR_ROOT=\"${TARGET_ROOT}/ostree/deploy/fedora-coreos/var\"",
 				"install -d -m0755 \"$PERSISTENT_HOME_ROOT\"",
 				"HOME_ROOT_CONTEXT=\"$(matchpathcon -n \"/var/home\")\"",
 				"persistent /var/home has wrong SELinux context",
 				"authorized_keys was not written to persistent user home",
-				"obsolete first-boot provisioning service remains in target",
+				"bootc install finalize",
 				"systemctl --root=\"$DEPLOY\" mask zincati.service",
 				"systemctl --root=\"$DEPLOY\" enable rpm-ostreed-automatic.timer",
-				"bootc install finalize",
+				"zincati is not masked in finalized target",
+				"rpm-ostreed-automatic.timer is not enabled in finalized target",
+				"SSH-only admin sudoers file did not survive bootc finalize",
+				"obsolete first-boot provisioning service remains in target",
 			} {
 				if !strings.Contains(call.Input, required) {
 					t.Fatalf("direct install script missing %q", required)
 				}
 			}
+
+			finalizePos := strings.Index(call.Input, "bootc install finalize \"$TARGET_ROOT\"")
+			timerPos := strings.LastIndex(call.Input, "systemctl --root=\"$DEPLOY\" enable rpm-ostreed-automatic.timer")
+			if finalizePos == -1 || timerPos == -1 || timerPos < finalizePos {
+				t.Fatalf("rpm-ostree timer must be enabled after bootc finalize")
+			}
+
 			for _, forbidden := range []string{
 				"persistent target /var/home is missing",
 				"home-server-provision-user.service\n[Unit]",
@@ -96,6 +108,23 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 				}
 			}
 		})
+	}
+}
+
+func TestHomeServerInstallerPasswordBackedAdminDoesNotGetNOPASSWD(t *testing.T) {
+	spy := runner.NewSpyRunner()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := testHomeServerConfig(model.HomeServerBootStandardMiB)
+	cfg.Users[0].PasswordHash = "$6$test$hash"
+
+	if err := NewHomeServerInstaller(spy, logger).Install(context.Background(), cfg, func(string) {}); err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if len(spy.Calls) != 1 {
+		t.Fatalf("expected one shell invocation, got %d", len(spy.Calls))
+	}
+	if !strings.Contains(spy.Calls[0].Input, "password-backed admin unexpectedly has passwordless sudo rule") {
+		t.Fatalf("expected password-backed sudo guard in direct install script")
 	}
 }
 
