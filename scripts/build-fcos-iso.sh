@@ -253,6 +253,12 @@ ign_file = sys.argv[1]
 expected_sha256 = sys.argv[2]
 ssh_key = sys.argv[3].strip()
 
+def data_source(text):
+    return (
+        "data:text/plain;charset=utf-8;base64,"
+        + base64.b64encode(text.encode("utf-8")).decode("ascii")
+    )
+
 bootstrap = f"""#!/usr/bin/bash
 set -euo pipefail
 expected={expected_sha256}
@@ -264,10 +270,7 @@ fi
 restorecon -F /opt/knuckle
 exec /opt/knuckle
 """
-bootstrap_source = (
-    "data:text/plain;charset=utf-8;base64,"
-    + base64.b64encode(bootstrap.encode("utf-8")).decode("ascii")
-)
+bootstrap_source = data_source(bootstrap)
 
 unit = """\
 [Unit]
@@ -312,6 +315,13 @@ config = {
 }
 if ssh_key:
     config["passwd"] = {"users": [{"name": "core", "sshAuthorizedKeys": [ssh_key]}]}
+    config["storage"]["files"].append(
+        {
+            "path": "/opt/home-server-installer-ssh.pub",
+            "mode": 0o600,
+            "contents": {"source": data_source(ssh_key + "\n")},
+        }
+    )
 
 with open(ign_file, "w", encoding="utf-8") as f:
     json.dump(config, f, separators=(",", ":"))
