@@ -120,7 +120,6 @@ sgdisk \
     --new=4:0:0 --typecode=4:8304 --change-name=4:'root' \
     "$TARGET_REAL"
 
-# partprobe is intentionally not required; it was absent in the proven FCOS live environment.
 blockdev --rereadpt "$TARGET_REAL" || true
 udevadm settle
 for _ in $(seq 1 20); do
@@ -154,17 +153,12 @@ BOOT_UUID="$(blkid -s UUID -o value "$P3")"
 
 echo "Home Server target UUIDs: root=${ROOT_UUID} boot=${BOOT_UUID}"
 
-# Keep the multi-gigabyte OCI working set on the selected target disk rather
-# than the RAM-backed live /var filesystem.
 mkdir -p "$PODMAN_SCRATCH" "$IMAGE_TMP" /var/lib/containers
 mount --bind "$PODMAN_SCRATCH" "$PODMAN_SCRATCH"
 mount --bind "$IMAGE_TMP" "$IMAGE_TMP"
 mount --bind "$PODMAN_SCRATCH" /var/lib/containers
 PODMAN_MOUNTED=1
 
-# containers/image needs registries.d metadata to discover Cosign signature
-# attachments stored alongside the image in GHCR. Keep this configuration
-# scoped to the live installer and remove it immediately after the pull.
 install -d -m0755 "$REGISTRIES_DIR"
 REGISTRIES_FILE="$(mktemp "${REGISTRIES_DIR}/00-home-server-installer.XXXXXX.yaml")"
 cat > "$REGISTRIES_FILE" <<'EOF_REGISTRIES'
@@ -176,8 +170,6 @@ docker:
 EOF_REGISTRIES
 chmod 0644 "$REGISTRIES_FILE"
 
-# The registry source must pass the Home Server sigstore policy before it is
-# admitted into the local target-backed store.
 env TMPDIR="$IMAGE_TMP" podman pull --signature-policy "$POLICY_FILE" "$IMAGE"
 rm -f -- "$REGISTRIES_FILE"
 REGISTRIES_FILE=""
@@ -196,8 +188,6 @@ BOOTC_ARGS=(
     /target
 )
 
-# Root key injection is retained as a recovery path during installation. The
-# normal configured user is provisioned directly below before first boot.
 if [[ -s "$SSH_KEYS_FILE" ]]; then
     BOOTC_ARGS=(
         "${BOOTC_ARGS[@]:0:${#BOOTC_ARGS[@]}-1}"
@@ -226,7 +216,6 @@ mapfile -t DEPLOYS < <(find "$DEPLOY_BASE" -mindepth 1 -maxdepth 1 -type d -name
 }
 DEPLOY="${DEPLOYS[0]}"
 
-# Machine identity and SSH policy are written into the actual deployment root.
 printf '%s\n' "$HOSTNAME" > "${DEPLOY}/etc/hostname"
 if [[ -n "$TIMEZONE" && -e "${DEPLOY}/usr/share/zoneinfo/${TIMEZONE}" ]]; then
     ln -sfn "/usr/share/zoneinfo/${TIMEZONE}" "${DEPLOY}/etc/localtime"
@@ -244,9 +233,6 @@ PubkeyAuthentication yes
 EOF_SSH
 chmod 0600 "${DEPLOY}/etc/ssh/sshd_config.d/99-home-server-installer.conf"
 
-# Provision the selected user directly into the deployment. The uCore image
-# does not contain a normal login user by default, so first boot must not be
-# responsible for creating the account or installing its SSH key.
 if grep -q "^${USERNAME}:" "${DEPLOY}/etc/passwd"; then
     usermod --root "$DEPLOY" --append --groups wheel "$USERNAME"
 else
@@ -267,23 +253,11 @@ else
 fi
 
 USER_ENTRY="$(awk -F: -v user="$USERNAME" '$1 == user { print; exit }' "${DEPLOY}/etc/passwd")"
-[[ -n "$USER_ENTRY" ]] || {
-    echo "selected user was not written to target passwd" >&2
-    exit 1
-}
+[[ -n "$USER_ENTRY" ]] || { echo "selected user was not written to target passwd" >&2; exit 1; }
 IFS=: read -r _ _ USER_UID USER_GID _ USER_HOME USER_SHELL <<< "$USER_ENTRY"
-[[ "$USER_UID" =~ ^[0-9]+$ && "$USER_GID" =~ ^[0-9]+$ ]] || {
-    echo "selected user has invalid target UID/GID" >&2
-    exit 1
-}
-[[ "$USER_HOME" == "/var/home/${USERNAME}" ]] || {
-    echo "selected user has unexpected home directory: ${USER_HOME}" >&2
-    exit 1
-}
-[[ "$USER_SHELL" == "/bin/bash" ]] || {
-    echo "selected user has unexpected shell: ${USER_SHELL}" >&2
-    exit 1
-}
+[[ "$USER_UID" =~ ^[0-9]+$ && "$USER_GID" =~ ^[0-9]+$ ]] || { echo "selected user has invalid target UID/GID" >&2; exit 1; }
+[[ "$USER_HOME" == "/var/home/${USERNAME}" ]] || { echo "selected user has unexpected home directory: ${USER_HOME}" >&2; exit 1; }
+[[ "$USER_SHELL" == "/bin/bash" ]] || { echo "selected user has unexpected shell: ${USER_SHELL}" >&2; exit 1; }
 
 WHEEL_MEMBERS="$(awk -F: '$1 == "wheel" { print $4; exit }' "${DEPLOY}/etc/group")"
 case ",${WHEEL_MEMBERS}," in
@@ -293,19 +267,11 @@ esac
 
 SHADOW_HASH="$(awk -F: -v user="$USERNAME" '$1 == user { print $2; exit }' "${DEPLOY}/etc/shadow")"
 if [[ -n "$PASSWORD_HASH" ]]; then
-    [[ "$SHADOW_HASH" == "$PASSWORD_HASH" ]] || {
-        echo "selected user password hash was not written to target shadow" >&2
-        exit 1
-    }
+    [[ "$SHADOW_HASH" == "$PASSWORD_HASH" ]] || { echo "selected user password hash was not written to target shadow" >&2; exit 1; }
 else
-    [[ "$SHADOW_HASH" == '!'* || "$SHADOW_HASH" == '*'* ]] || {
-        echo "selected user password is not locked for SSH-only install" >&2
-        exit 1
-    }
+    [[ "$SHADOW_HASH" == '!'* || "$SHADOW_HASH" == '*'* ]] || { echo "selected user password is not locked for SSH-only install" >&2; exit 1; }
 fi
 
-# A passwordless SSH-only administrator must still be able to administer the
-# machine. Password-backed users keep normal wheel/password sudo behavior.
 SUDOERS_FILE="${DEPLOY}/etc/sudoers.d/90-home-server-admin"
 mkdir -p "${DEPLOY}/etc/sudoers.d"
 if [[ -z "$PASSWORD_HASH" ]]; then
@@ -315,9 +281,6 @@ else
     rm -f "$SUDOERS_FILE"
 fi
 
-# Persist the Home Server update intent through systemd's first-boot preset
-# pass. This mirrors the proven legacy direct-bootc installer behavior: the
-# specific 00-home-server rule wins before Fedora's 99-default-disable preset.
 PRESET_FILE="${DEPLOY}/etc/systemd/system-preset/00-home-server.preset"
 mkdir -p "${DEPLOY}/etc/systemd/system-preset"
 cat > "$PRESET_FILE" <<'EOF_PRESET'
@@ -326,116 +289,56 @@ enable rpm-ostreed-automatic.timer
 EOF_PRESET
 chmod 0644 "$PRESET_FILE"
 
-# /home points to /var/home at runtime. For an OSTree deployment, the real
-# persistent /var is the stateroot var directory, not ${DEPLOY}/var. A fresh
-# --skip-finalize deployment may not contain /var/home yet, so create it here.
 PERSISTENT_VAR_ROOT="${TARGET_ROOT}/ostree/deploy/fedora-coreos/var"
-[[ -d "$PERSISTENT_VAR_ROOT" ]] || {
-    echo "persistent target stateroot /var is missing" >&2
-    exit 1
-}
+[[ -d "$PERSISTENT_VAR_ROOT" ]] || { echo "persistent target stateroot /var is missing" >&2; exit 1; }
 PERSISTENT_HOME_ROOT="${PERSISTENT_VAR_ROOT}/home"
 PERSISTENT_HOME="${PERSISTENT_HOME_ROOT}/${USERNAME}"
 install -d -m0755 "$PERSISTENT_HOME_ROOT"
 HOME_ROOT_CONTEXT="$(matchpathcon -n "/var/home")"
-[[ -n "$HOME_ROOT_CONTEXT" && "$HOME_ROOT_CONTEXT" != "<<none>>" ]] || {
-    echo "could not resolve SELinux context for /var/home" >&2
-    exit 1
-}
+[[ -n "$HOME_ROOT_CONTEXT" && "$HOME_ROOT_CONTEXT" != "<<none>>" ]] || { echo "could not resolve SELinux context for /var/home" >&2; exit 1; }
 chcon "$HOME_ROOT_CONTEXT" "$PERSISTENT_HOME_ROOT"
 
 install -d -m0700 "$PERSISTENT_HOME"
 chown "${USER_UID}:${USER_GID}" "$PERSISTENT_HOME"
 HOME_CONTEXT="$(matchpathcon -n "/var/home/${USERNAME}")"
-[[ -n "$HOME_CONTEXT" && "$HOME_CONTEXT" != "<<none>>" ]] || {
-    echo "could not resolve SELinux context for user home" >&2
-    exit 1
-}
+[[ -n "$HOME_CONTEXT" && "$HOME_CONTEXT" != "<<none>>" ]] || { echo "could not resolve SELinux context for user home" >&2; exit 1; }
 chcon "$HOME_CONTEXT" "$PERSISTENT_HOME"
 
 if [[ -s "$SSH_KEYS_FILE" ]]; then
     install -d -m0700 "$PERSISTENT_HOME/.ssh"
     install -m0600 "$SSH_KEYS_FILE" "$PERSISTENT_HOME/.ssh/authorized_keys"
     chown -R "${USER_UID}:${USER_GID}" "$PERSISTENT_HOME/.ssh"
-
     SSH_CONTEXT="$(matchpathcon -n "/var/home/${USERNAME}/.ssh")"
     AUTH_KEYS_CONTEXT="$(matchpathcon -n "/var/home/${USERNAME}/.ssh/authorized_keys")"
-    [[ -n "$SSH_CONTEXT" && "$SSH_CONTEXT" != "<<none>>" ]] || {
-        echo "could not resolve SELinux context for user SSH directory" >&2
-        exit 1
-    }
-    [[ -n "$AUTH_KEYS_CONTEXT" && "$AUTH_KEYS_CONTEXT" != "<<none>>" ]] || {
-        echo "could not resolve SELinux context for authorized_keys" >&2
-        exit 1
-    }
+    [[ -n "$SSH_CONTEXT" && "$SSH_CONTEXT" != "<<none>>" ]] || { echo "could not resolve SELinux context for user SSH directory" >&2; exit 1; }
+    [[ -n "$AUTH_KEYS_CONTEXT" && "$AUTH_KEYS_CONTEXT" != "<<none>>" ]] || { echo "could not resolve SELinux context for authorized_keys" >&2; exit 1; }
     chcon "$SSH_CONTEXT" "$PERSISTENT_HOME/.ssh"
     chcon "$AUTH_KEYS_CONTEXT" "$PERSISTENT_HOME/.ssh/authorized_keys"
 fi
 
-[[ "$(stat -c %a "$PERSISTENT_HOME_ROOT")" == "755" ]] || {
-    echo "persistent /var/home has wrong permissions" >&2
-    exit 1
-}
-[[ "$(stat -c %C "$PERSISTENT_HOME_ROOT")" == "$HOME_ROOT_CONTEXT" ]] || {
-    echo "persistent /var/home has wrong SELinux context" >&2
-    exit 1
-}
-[[ "$(stat -c %u "$PERSISTENT_HOME")" == "$USER_UID" ]] || {
-    echo "persistent user home has wrong owner" >&2
-    exit 1
-}
-[[ "$(stat -c %g "$PERSISTENT_HOME")" == "$USER_GID" ]] || {
-    echo "persistent user home has wrong group" >&2
-    exit 1
-}
-[[ "$(stat -c %a "$PERSISTENT_HOME")" == "700" ]] || {
-    echo "persistent user home has wrong permissions" >&2
-    exit 1
-}
-[[ "$(stat -c %C "$PERSISTENT_HOME")" == "$HOME_CONTEXT" ]] || {
-    echo "persistent user home has wrong SELinux context" >&2
-    exit 1
-}
+[[ "$(stat -c %a "$PERSISTENT_HOME_ROOT")" == "755" ]] || { echo "persistent /var/home has wrong permissions" >&2; exit 1; }
+[[ "$(stat -c %C "$PERSISTENT_HOME_ROOT")" == "$HOME_ROOT_CONTEXT" ]] || { echo "persistent /var/home has wrong SELinux context" >&2; exit 1; }
+[[ "$(stat -c %u "$PERSISTENT_HOME")" == "$USER_UID" ]] || { echo "persistent user home has wrong owner" >&2; exit 1; }
+[[ "$(stat -c %g "$PERSISTENT_HOME")" == "$USER_GID" ]] || { echo "persistent user home has wrong group" >&2; exit 1; }
+[[ "$(stat -c %a "$PERSISTENT_HOME")" == "700" ]] || { echo "persistent user home has wrong permissions" >&2; exit 1; }
+[[ "$(stat -c %C "$PERSISTENT_HOME")" == "$HOME_CONTEXT" ]] || { echo "persistent user home has wrong SELinux context" >&2; exit 1; }
 
 if [[ -s "$SSH_KEYS_FILE" ]]; then
-    [[ -s "$PERSISTENT_HOME/.ssh/authorized_keys" ]] || {
-        echo "authorized_keys was not written to persistent user home" >&2
-        exit 1
-    }
-    [[ "$(stat -c %u "$PERSISTENT_HOME/.ssh/authorized_keys")" == "$USER_UID" ]] || {
-        echo "authorized_keys has wrong owner" >&2
-        exit 1
-    }
-    [[ "$(stat -c %g "$PERSISTENT_HOME/.ssh/authorized_keys")" == "$USER_GID" ]] || {
-        echo "authorized_keys has wrong group" >&2
-        exit 1
-    }
-    [[ "$(stat -c %a "$PERSISTENT_HOME/.ssh/authorized_keys")" == "600" ]] || {
-        echo "authorized_keys has wrong permissions" >&2
-        exit 1
-    }
-    [[ "$(stat -c %C "$PERSISTENT_HOME/.ssh")" == "$SSH_CONTEXT" ]] || {
-        echo "user SSH directory has wrong SELinux context" >&2
-        exit 1
-    }
-    [[ "$(stat -c %C "$PERSISTENT_HOME/.ssh/authorized_keys")" == "$AUTH_KEYS_CONTEXT" ]] || {
-        echo "authorized_keys has wrong SELinux context" >&2
-        exit 1
-    }
+    [[ -s "$PERSISTENT_HOME/.ssh/authorized_keys" ]] || { echo "authorized_keys was not written to persistent user home" >&2; exit 1; }
+    [[ "$(stat -c %u "$PERSISTENT_HOME/.ssh/authorized_keys")" == "$USER_UID" ]] || { echo "authorized_keys has wrong owner" >&2; exit 1; }
+    [[ "$(stat -c %g "$PERSISTENT_HOME/.ssh/authorized_keys")" == "$USER_GID" ]] || { echo "authorized_keys has wrong group" >&2; exit 1; }
+    [[ "$(stat -c %a "$PERSISTENT_HOME/.ssh/authorized_keys")" == "600" ]] || { echo "authorized_keys has wrong permissions" >&2; exit 1; }
+    [[ "$(stat -c %C "$PERSISTENT_HOME/.ssh")" == "$SSH_CONTEXT" ]] || { echo "user SSH directory has wrong SELinux context" >&2; exit 1; }
+    [[ "$(stat -c %C "$PERSISTENT_HOME/.ssh/authorized_keys")" == "$AUTH_KEYS_CONTEXT" ]] || { echo "authorized_keys has wrong SELinux context" >&2; exit 1; }
 fi
 
-# The old first-boot provisioning mechanism is intentionally absent. A
-# completed install must already contain the final user and SSH state.
 rm -rf "${DEPLOY}/etc/home-server-installer"
 rm -f \
     "${DEPLOY}/etc/systemd/system/home-server-provision-user.service" \
     "${DEPLOY}/etc/systemd/system/multi-user.target.wants/home-server-provision-user.service"
 
 if [[ "$NETWORK_MODE" == static ]]; then
-    [[ -n "$NETWORK_IFACE" && -n "$NETWORK_ADDR" && -n "$NETWORK_GATEWAY" ]] || {
-        echo "static network configuration is incomplete" >&2
-        exit 1
-    }
+    [[ -n "$NETWORK_IFACE" && -n "$NETWORK_ADDR" && -n "$NETWORK_GATEWAY" ]] || { echo "static network configuration is incomplete" >&2; exit 1; }
     mkdir -p "${DEPLOY}/etc/NetworkManager/system-connections"
     cat > "${DEPLOY}/etc/NetworkManager/system-connections/home-server-static.nmconnection" <<EOF_NET
 [connection]
@@ -455,8 +358,6 @@ EOF_NET
     chmod 0600 "${DEPLOY}/etc/NetworkManager/system-connections/home-server-static.nmconnection"
 fi
 
-# The target-image container is gone; temporary image storage can now be
-# removed before bootc finalize and before the first installed boot.
 umount /var/lib/containers
 PODMAN_MOUNTED=0
 umount "$PODMAN_SCRATCH"
@@ -465,77 +366,30 @@ rm -rf "$PODMAN_SCRATCH" "$IMAGE_TMP"
 
 bootc install finalize "$TARGET_ROOT"
 
-# Apply and verify update policy against the finalized deployment. The
-# persistent preset is essential because the first boot performs preset-all
-# and Fedora's vendor fallback is "disable *".
 systemctl --root="$DEPLOY" disable zincati.service || true
 systemctl --root="$DEPLOY" mask zincati.service
 systemctl --root="$DEPLOY" preset rpm-ostreed-automatic.timer
 
-[[ "$(systemctl --root="$DEPLOY" is-enabled zincati.service 2>/dev/null || true)" == "masked" ]] || {
-    echo "zincati is not masked in finalized target" >&2
-    exit 1
-}
-[[ "$(systemctl --root="$DEPLOY" is-enabled rpm-ostreed-automatic.timer 2>/dev/null || true)" == "enabled" ]] || {
-    echo "rpm-ostreed-automatic.timer is not enabled in finalized target" >&2
-    exit 1
-}
-[[ -f "$PRESET_FILE" ]] || {
-    echo "Home Server update preset did not survive bootc finalize" >&2
-    exit 1
-}
-[[ "$(stat -c %a "$PRESET_FILE")" == "644" ]] || {
-    echo "Home Server update preset has wrong permissions" >&2
-    exit 1
-}
-grep -Fxq "disable zincati.service" "$PRESET_FILE" || {
-    echo "Home Server update preset is missing Zincati policy" >&2
-    exit 1
-}
-grep -Fxq "enable rpm-ostreed-automatic.timer" "$PRESET_FILE" || {
-    echo "Home Server update preset is missing rpm-ostree timer policy" >&2
-    exit 1
-}
+[[ "$(systemctl --root="$DEPLOY" is-enabled zincati.service 2>/dev/null || true)" == "masked" ]] || { echo "zincati is not masked in finalized target" >&2; exit 1; }
+[[ "$(systemctl --root="$DEPLOY" is-enabled rpm-ostreed-automatic.timer 2>/dev/null || true)" == "enabled" ]] || { echo "rpm-ostreed-automatic.timer is not enabled in finalized target" >&2; exit 1; }
+[[ -f "$PRESET_FILE" ]] || { echo "Home Server update preset did not survive bootc finalize" >&2; exit 1; }
+[[ "$(stat -c %a "$PRESET_FILE")" == "644" ]] || { echo "Home Server update preset has wrong permissions" >&2; exit 1; }
+grep -Fxq "disable zincati.service" "$PRESET_FILE" || { echo "Home Server update preset is missing Zincati policy" >&2; exit 1; }
+grep -Fxq "enable rpm-ostreed-automatic.timer" "$PRESET_FILE" || { echo "Home Server update preset is missing rpm-ostree timer policy" >&2; exit 1; }
 
-# Finalization must preserve the directly provisioned account and persistent
-# SSH/admin state. Fail rather than produce a machine that cannot be accessed.
-grep -q "^${USERNAME}:" "${DEPLOY}/etc/passwd" || {
-    echo "selected user did not survive bootc finalize" >&2
-    exit 1
-}
-[[ -d "$PERSISTENT_HOME" ]] || {
-    echo "persistent user home did not survive bootc finalize" >&2
-    exit 1
-}
+grep -q "^${USERNAME}:" "${DEPLOY}/etc/passwd" || { echo "selected user did not survive bootc finalize" >&2; exit 1; }
+[[ -d "$PERSISTENT_HOME" ]] || { echo "persistent user home did not survive bootc finalize" >&2; exit 1; }
 if [[ -s "$SSH_KEYS_FILE" ]]; then
-    [[ -s "$PERSISTENT_HOME/.ssh/authorized_keys" ]] || {
-        echo "authorized_keys did not survive bootc finalize" >&2
-        exit 1
-    }
+    [[ -s "$PERSISTENT_HOME/.ssh/authorized_keys" ]] || { echo "authorized_keys did not survive bootc finalize" >&2; exit 1; }
 fi
 if [[ -z "$PASSWORD_HASH" ]]; then
-    [[ -f "$SUDOERS_FILE" ]] || {
-        echo "SSH-only admin sudoers file did not survive bootc finalize" >&2
-        exit 1
-    }
-    [[ "$(stat -c %a "$SUDOERS_FILE")" == "440" ]] || {
-        echo "SSH-only admin sudoers file has wrong permissions" >&2
-        exit 1
-    }
-    grep -Fxq "${USERNAME} ALL=(ALL) NOPASSWD: ALL" "$SUDOERS_FILE" || {
-        echo "SSH-only admin sudoers rule is incorrect" >&2
-        exit 1
-    }
+    [[ -f "$SUDOERS_FILE" ]] || { echo "SSH-only admin sudoers file did not survive bootc finalize" >&2; exit 1; }
+    [[ "$(stat -c %a "$SUDOERS_FILE")" == "440" ]] || { echo "SSH-only admin sudoers file has wrong permissions" >&2; exit 1; }
+    grep -Fxq "${USERNAME} ALL=(ALL) NOPASSWD: ALL" "$SUDOERS_FILE" || { echo "SSH-only admin sudoers rule is incorrect" >&2; exit 1; }
 else
-    [[ ! -e "$SUDOERS_FILE" ]] || {
-        echo "password-backed admin unexpectedly has passwordless sudo rule" >&2
-        exit 1
-    }
+    [[ ! -e "$SUDOERS_FILE" ]] || { echo "password-backed admin unexpectedly has passwordless sudo rule" >&2; exit 1; }
 fi
-[[ ! -e "${DEPLOY}/etc/systemd/system/home-server-provision-user.service" ]] || {
-    echo "obsolete first-boot provisioning service remains in target" >&2
-    exit 1
-}
+[[ ! -e "${DEPLOY}/etc/systemd/system/home-server-provision-user.service" ]] || { echo "obsolete first-boot provisioning service remains in target" >&2; exit 1; }
 sync
 
 umount "${TARGET_ROOT}/boot/efi"; EFI_MOUNTED=0
@@ -546,8 +400,6 @@ trap - EXIT
 echo "Home Server direct installation complete"
 `
 
-// HomeServerInstaller installs the selected signed uCore image directly from
-// the Fedora CoreOS live environment using the already-proven bootc layout.
 type HomeServerInstaller struct {
 	Runner runner.Runner
 	Logger *slog.Logger
@@ -620,10 +472,7 @@ func (i *HomeServerInstaller) Install(ctx context.Context, cfg *model.InstallCon
 	}
 
 	progress("Preparing Home Server disk layout...")
-	i.Logger.Info("executing Home Server direct bootc install",
-		"disk", cfg.Disk.DevPath,
-		"image", cfg.HomeServerImage,
-		"boot_mib", bootMiB)
+	i.Logger.Info("executing Home Server direct bootc install", "disk", cfg.Disk.DevPath, "image", cfg.HomeServerImage, "boot_mib", bootMiB)
 
 	args := []string{
 		"-s", "--",
