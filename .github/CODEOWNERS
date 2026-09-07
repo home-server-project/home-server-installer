@@ -1,9 +1,0 @@
-* @castrojo @p5 @m2Giles @tulilirockz
-
-.github/workflows/ @castrojo @p5 @m2Giles @tulilirockz
-Justfile           @castrojo @p5 @m2Giles @tulilirockz
-
-# BEGIN TRIAGERS — managed by projectbluefin/common, do not edit manually in downstream repos
-docs/**  @inffy @renner0e @ledif @castrojo @hanthor @ahmedadan
-*.md     @inffy @renner0e @ledif @castrojo @hanthor @ahmedadan
-# END TRIAGERS
