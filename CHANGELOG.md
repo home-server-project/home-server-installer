@@ -2,7 +2,7 @@
 
 This changelog tracks the Home Server Installer fork and its Home Server-specific work.
 
-The inherited upstream Knuckle release history has been removed here because it describes the original installer rather than the current Home Server product direction. Upstream history remains available in the Project Bluefin Knuckle repository.
+The inherited upstream Knuckle release history has been removed here because it describes the original installer rather than the current Home Server product direction. Upstream history remains available in the [Project Bluefin Knuckle repository](https://github.com/projectbluefin/knuckle).
 
 ## [Unreleased]
 
