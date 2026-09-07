@@ -73,6 +73,11 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 				"useradd --root \"$DEPLOY\"",
 				"SUDOERS_FILE=\"${DEPLOY}/etc/sudoers.d/90-home-server-admin\"",
 				"NOPASSWD: ALL",
+				"PRESET_FILE=\"${DEPLOY}/etc/systemd/system-preset/00-home-server.preset\"",
+				"disable zincati.service",
+				"enable rpm-ostreed-automatic.timer",
+				"systemctl --root=\"$DEPLOY\" preset rpm-ostreed-automatic.timer",
+				"Home Server update preset did not survive bootc finalize",
 				"PERSISTENT_VAR_ROOT=\"${TARGET_ROOT}/ostree/deploy/fedora-coreos/var\"",
 				"install -d -m0755 \"$PERSISTENT_HOME_ROOT\"",
 				"HOME_ROOT_CONTEXT=\"$(matchpathcon -n \"/var/home\")\"",
@@ -80,7 +85,6 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 				"authorized_keys was not written to persistent user home",
 				"bootc install finalize",
 				"systemctl --root=\"$DEPLOY\" mask zincati.service",
-				"systemctl --root=\"$DEPLOY\" enable rpm-ostreed-automatic.timer",
 				"zincati is not masked in finalized target",
 				"rpm-ostreed-automatic.timer is not enabled in finalized target",
 				"SSH-only admin sudoers file did not survive bootc finalize",
@@ -92,9 +96,9 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 			}
 
 			finalizePos := strings.Index(call.Input, "bootc install finalize \"$TARGET_ROOT\"")
-			timerPos := strings.LastIndex(call.Input, "systemctl --root=\"$DEPLOY\" enable rpm-ostreed-automatic.timer")
-			if finalizePos == -1 || timerPos == -1 || timerPos < finalizePos {
-				t.Fatalf("rpm-ostree timer must be enabled after bootc finalize")
+			presetPos := strings.LastIndex(call.Input, "systemctl --root=\"$DEPLOY\" preset rpm-ostreed-automatic.timer")
+			if finalizePos == -1 || presetPos == -1 || presetPos < finalizePos {
+				t.Fatalf("rpm-ostree timer preset must be applied after bootc finalize")
 			}
 
 			for _, forbidden := range []string{
