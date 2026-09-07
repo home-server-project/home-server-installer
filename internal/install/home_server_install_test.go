@@ -168,7 +168,7 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 			registriesCreatePos := strings.Index(call.Input, "00-home-server-installer.XXXXXX.yaml")
 			pullPos := strings.Index(call.Input, "podman pull --signature-policy")
 			registriesRemovePos := strings.LastIndex(call.Input, "rm -f -- \"$REGISTRIES_FILE\"")
-			if registriesCreatePos == -1 || pullPos == -1 || registriesRemovePos == -1 || !(registriesCreatePos < pullPos && pullPos < registriesRemovePos) {
+			if registriesCreatePos == -1 || pullPos == -1 || registriesRemovePos == -1 || registriesCreatePos >= pullPos || pullPos >= registriesRemovePos {
 				t.Fatalf("sigstore attachment config must wrap only the signed image pull")
 			}
 
