@@ -64,7 +64,7 @@ func (m *Model) buildHomeServerUserForm() *huh.Form {
 		huh.NewGroup(
 			huh.NewNote().
 				Title("Authentication").
-				Description("Set up SSH access. Local SSH keys are included automatically when available. Add a GitHub username or paste a public key directly."),
+				Description("Set up SSH access. A public key embedded by the Home Server Builder is included automatically when present. You can also add a GitHub username or paste a public key directly."),
 			huh.NewInput().
 				Title("GitHub Username").
 				Description("Fetches your SSH public keys automatically").
@@ -76,7 +76,7 @@ func (m *Model) buildHomeServerUserForm() *huh.Form {
 				Value(&m.sshKeyInput),
 			huh.NewNote().
 				Title("").
-				Description(m.localKeysSummary()),
+				Description(m.homeServerKeysSummary()),
 		),
 	).WithTheme(huh.ThemeFunc(huh.ThemeDracula)).WithShowHelp(true).WithWidth(80)
 }
