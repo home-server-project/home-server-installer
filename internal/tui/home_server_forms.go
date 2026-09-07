@@ -83,10 +83,7 @@ func (m *Model) buildHomeServerUserForm() *huh.Form {
 
 func (m *Model) buildHomeServerReviewForm() *huh.Form {
 	cfg := &m.Wizard.State.Config
-	title := "⚠️  DESTRUCTIVE OPERATION — Install Home Server uCore to disk?"
-	if cfg.HomeServerImage == model.HomeServerUCoreHCIImage {
-		title = "⚠️  DESTRUCTIVE OPERATION — Install Home Server uCore HCI to disk?"
-	}
+	title := fmt.Sprintf("⚠️  DESTRUCTIVE OPERATION — Install %s to disk?", installTargetDisplayName(cfg))
 
 	dangerTheme := huh.ThemeFunc(func(isDark bool) *huh.Styles {
 		styles := huh.ThemeDracula(isDark)
