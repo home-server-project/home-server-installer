@@ -66,7 +66,13 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 				"--typecode=3:EA00",
 				"--typecode=4:8304",
 				"root filesystem UUID is empty",
+				"REGISTRIES_DIR=/etc/containers/registries.d",
+				"00-home-server-installer.XXXXXX.yaml",
+				"ghcr.io/home-server-project/home-server-ucore:",
+				"ghcr.io/home-server-project/home-server-ucore-hci:",
+				"use-sigstore-attachments: true",
 				"podman pull --signature-policy",
+				"rm -f -- \"$REGISTRIES_FILE\"",
 				"bootc install to-filesystem",
 				"--root-mount-spec",
 				"--boot-mount-spec",
@@ -99,6 +105,13 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 			presetPos := strings.LastIndex(call.Input, "systemctl --root=\"$DEPLOY\" preset rpm-ostreed-automatic.timer")
 			if finalizePos == -1 || presetPos == -1 || presetPos < finalizePos {
 				t.Fatalf("rpm-ostree timer preset must be applied after bootc finalize")
+			}
+
+			registriesCreatePos := strings.Index(call.Input, "00-home-server-installer.XXXXXX.yaml")
+			pullPos := strings.Index(call.Input, "podman pull --signature-policy")
+			registriesRemovePos := strings.LastIndex(call.Input, "rm -f -- \"$REGISTRIES_FILE\"")
+			if registriesCreatePos == -1 || pullPos == -1 || registriesRemovePos == -1 || !(registriesCreatePos < pullPos && pullPos < registriesRemovePos) {
+				t.Fatalf("sigstore attachment config must wrap only the signed image pull")
 			}
 
 			for _, forbidden := range []string{
