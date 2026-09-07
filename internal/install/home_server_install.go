@@ -448,7 +448,7 @@ func (i *HomeServerInstaller) Install(ctx context.Context, cfg *model.InstallCon
 		return fmt.Errorf("unsupported Home Server /boot size %d MiB", bootMiB)
 	}
 	if len(cfg.Users) == 0 || strings.TrimSpace(cfg.Users[0].Username) == "" {
-		return fmt.Errorf("Home Server install requires a primary user")
+		return fmt.Errorf("home Server install requires a primary user")
 	}
 
 	sshKeyContent := ""
@@ -459,13 +459,13 @@ func (i *HomeServerInstaller) Install(ctx context.Context, cfg *model.InstallCon
 	if err != nil {
 		return fmt.Errorf("writing temporary SSH keys: %w", err)
 	}
-	defer os.Remove(sshFile)
+	defer func() { _ = os.Remove(sshFile) }()
 
 	keyFile, err := writePrivateTemp("knuckle-home-server-cosign-*", verificationKey)
 	if err != nil {
 		return fmt.Errorf("writing temporary image verification key: %w", err)
 	}
-	defer os.Remove(keyFile)
+	defer func() { _ = os.Remove(keyFile) }()
 
 	policy := fmt.Sprintf(`{
   "default": [{"type":"reject"}],
@@ -484,7 +484,7 @@ func (i *HomeServerInstaller) Install(ctx context.Context, cfg *model.InstallCon
 	if err != nil {
 		return fmt.Errorf("writing temporary signature policy: %w", err)
 	}
-	defer os.Remove(policyFile)
+	defer func() { _ = os.Remove(policyFile) }()
 
 	passwordHash := ""
 	if len(cfg.Users) > 0 {
