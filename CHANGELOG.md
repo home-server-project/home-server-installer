@@ -7,9 +7,15 @@ The inherited upstream Knuckle release history has been removed here because it 
 ## [Unreleased]
 
 ### Working now
-- Home Server image selection is limited to the two supported targets:
-  - `ghcr.io/home-server-project/home-server-ucore:lts`
-  - `ghcr.io/home-server-project/home-server-ucore-hci:lts`
+- The Home Server image picker exposes five signed LTS targets:
+  - `ghcr.io/home-server-project/home-server-ucore:lts` — Home Server uCore LTS (default/recommended).
+  - `ghcr.io/home-server-project/home-server-ucore-hci:lts` — Home Server uCore HCI LTS.
+  - `ghcr.io/ublue-os/ucore-minimal:lts` — upstream Universal Blue uCore Minimal LTS.
+  - `ghcr.io/ublue-os/ucore:lts` — upstream Universal Blue uCore LTS.
+  - `ghcr.io/ublue-os/ucore-hci:lts` — upstream Universal Blue uCore HCI LTS.
+- The installer intentionally exposes only LTS targets. Stable and NVIDIA variants remain available as post-install `bootc switch` destinations instead of expanding the installer into a large image matrix.
+- Home Server Project images are verified with the Home Server Project cosign public key; upstream `ublue-os/ucore*` images are verified with Universal Blue's uCore cosign public key. Unknown image repositories remain rejected.
+- Sigstore attachment discovery is enabled temporarily for all five supported repositories during the signed image pull.
 - Home Server installs use a dedicated direct `bootc install to-filesystem` path instead of the stock `coreos-installer install` partition layout.
 - Home Server storage layout supports two explicit XBOOTLDR presets:
   - 1 GiB `/boot` — standard and recommended for uCore / uCore HCI.
@@ -20,8 +26,7 @@ The inherited upstream Knuckle release history has been removed here because it 
   - ext4 XBOOTLDR `/boot` using the selected preset.
   - XFS root using the remaining disk.
 - Destructive target selection is revalidated immediately before partitioning, including block-device identity, expected size, serial when available, and mounted-filesystem checks.
-- Home Server container images are pulled with enforced sigstore verification using the embedded Home Server cosign public key.
-- Sigstore attachment discovery is enabled temporarily for both Home Server image repositories during installation, fixing the previous `A signature was required, but no signature exists` failure.
+- Supported container images are pulled with enforced sigstore verification using the trust key assigned to the selected repository.
 - Temporary signature-discovery configuration and installer Podman scratch state are cleaned up and do not persist into the installed system.
 - The selected image is installed directly as the first bootable deployment; there is no installed Fedora CoreOS intermediate and no autorebase bootstrap service.
 - Primary-user provisioning is written directly into the target deployment before first boot.
@@ -41,7 +46,7 @@ The inherited upstream Knuckle release history has been removed here because it 
 The 2026-09-07 clean uCore HCI VM runs completed through the normal installer path with no Podman wrapper, custom `PATH`, service stop, or signature bypass.
 
 Verified results:
-- Signed HCI image pull and install completed successfully.
+- Signed Home Server HCI image pull and install completed successfully.
 - First boot went directly into Home Server uCore HCI.
 - 1 GiB standard `/boot` layout was correct.
 - The separate 20 GiB sentinel disk remained untouched.
@@ -65,6 +70,7 @@ Verified results:
 - In the password-backed builder-key run, SSH key login worked while `sudo -n true` correctly failed with `a password is required` after `sudo -k`.
 
 ### Still to validate end-to-end
+- Validate one upstream Universal Blue target (uCore Minimal LTS is the planned representative) through the direct signed pull/install/first-boot path. The three upstream choices share the same Universal Blue signing trust path.
 - Validate the SSH-key-only path with a blank password and confirm the intended `NOPASSWD` sudo rule on the finished machine.
 
 ### Notes
