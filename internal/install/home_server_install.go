@@ -17,6 +17,23 @@ wSS/hmdv0B25JOSqi0dbyvW8XAJHJ4UOl/GeOSQM4XuDey9yI9I09r9XWw==
 -----END PUBLIC KEY-----
 `
 
+const upstreamUCoreCosignPublicKey = `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHLRpBfPRYiMl9wb7s6fx47PzzNWu
+3zyJgXhWEvxoOgwv9CpwjbvUwR9qHxNMWkJhuGE6cjDA2hpy1I6NbA+24Q==
+-----END PUBLIC KEY-----
+`
+
+func homeServerImageVerificationKey(image string) (string, bool) {
+	switch image {
+	case model.HomeServerUCoreImage, model.HomeServerUCoreHCIImage:
+		return homeServerInstallerCosignPublicKey, true
+	case model.UpstreamUCoreMinimalImage, model.UpstreamUCoreImage, model.UpstreamUCoreHCIImage:
+		return upstreamUCoreCosignPublicKey, true
+	default:
+		return "", false
+	}
+}
+
 const homeServerDirectInstallScript = `set -euo pipefail
 
 TARGET="$1"
@@ -166,6 +183,12 @@ docker:
   ghcr.io/home-server-project/home-server-ucore:
     use-sigstore-attachments: true
   ghcr.io/home-server-project/home-server-ucore-hci:
+    use-sigstore-attachments: true
+  ghcr.io/ublue-os/ucore-minimal:
+    use-sigstore-attachments: true
+  ghcr.io/ublue-os/ucore:
+    use-sigstore-attachments: true
+  ghcr.io/ublue-os/ucore-hci:
     use-sigstore-attachments: true
 EOF_REGISTRIES
 chmod 0644 "$REGISTRIES_FILE"
@@ -413,7 +436,8 @@ func (i *HomeServerInstaller) Install(ctx context.Context, cfg *model.InstallCon
 	if cfg == nil {
 		return fmt.Errorf("install config cannot be nil")
 	}
-	if cfg.HomeServerImage != model.HomeServerUCoreImage && cfg.HomeServerImage != model.HomeServerUCoreHCIImage {
+	verificationKey, supported := homeServerImageVerificationKey(cfg.HomeServerImage)
+	if !supported {
 		return fmt.Errorf("unsupported Home Server image %q", cfg.HomeServerImage)
 	}
 	bootMiB := cfg.HomeServerBootSizeMiB
@@ -437,7 +461,7 @@ func (i *HomeServerInstaller) Install(ctx context.Context, cfg *model.InstallCon
 	}
 	defer os.Remove(sshFile)
 
-	keyFile, err := writePrivateTemp("knuckle-home-server-cosign-*", homeServerInstallerCosignPublicKey)
+	keyFile, err := writePrivateTemp("knuckle-home-server-cosign-*", verificationKey)
 	if err != nil {
 		return fmt.Errorf("writing temporary image verification key: %w", err)
 	}
