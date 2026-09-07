@@ -227,7 +227,7 @@ chmod 0600 "${DEPLOY}/etc/ssh/sshd_config.d/99-home-server-installer.conf"
 
 # Provision the selected normal user before sshd starts on first boot. This
 # works for the existing core user and for a validated custom username.
-mkdir -p "${DEPLOY}/etc/home-server-installer" "${DEPLOY}/etc/systemd/system/multi-user.target.wants"
+mkdir -p "${DEPLOY}/etc/home-server-installer"
 printf 'USERNAME=%q\nPASSWORD_HASH=%q\n' "$USERNAME" "$PASSWORD_HASH" > "${DEPLOY}/etc/home-server-installer/user.env"
 chmod 0600 "${DEPLOY}/etc/home-server-installer/user.env"
 if [[ -s "$SSH_KEYS_FILE" ]]; then
@@ -273,7 +273,11 @@ ExecStart=/etc/home-server-installer/provision-user.sh
 [Install]
 WantedBy=multi-user.target
 EOF_UNIT
-ln -sfn ../home-server-provision-user.service "${DEPLOY}/etc/systemd/system/multi-user.target.wants/home-server-provision-user.service"
+systemctl --root="$DEPLOY" enable home-server-provision-user.service
+[[ "$(systemctl --root="$DEPLOY" is-enabled home-server-provision-user.service)" == "enabled" ]] || {
+    echo "failed to enable Home Server user provisioning service" >&2
+    exit 1
+}
 
 if [[ "$NETWORK_MODE" == static ]]; then
     [[ -n "$NETWORK_IFACE" && -n "$NETWORK_ADDR" && -n "$NETWORK_GATEWAY" ]] || {
@@ -314,6 +318,14 @@ umount "$IMAGE_TMP"
 rm -rf "$PODMAN_SCRATCH" "$IMAGE_TMP"
 
 bootc install finalize "$TARGET_ROOT"
+
+# Finalization must not drop the first-boot provisioning enablement. Re-enable
+# defensively, then fail the install if systemd still does not see it enabled.
+systemctl --root="$DEPLOY" enable home-server-provision-user.service
+[[ "$(systemctl --root="$DEPLOY" is-enabled home-server-provision-user.service)" == "enabled" ]] || {
+    echo "Home Server user provisioning service did not survive bootc finalize" >&2
+    exit 1
+}
 sync
 
 umount "${TARGET_ROOT}/boot/efi"; EFI_MOUNTED=0
