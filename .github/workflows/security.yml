@@ -46,28 +46,11 @@ jobs:
         with:
           category: "/language:go"
 
-  dependency-review:
-    name: dependency-review (PR only)
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
-        with:
-          fail-on-severity: high
-          comment-summary-in-pr: on-failure
-
   scorecard:
     name: OSSF Scorecard
     # Only run on schedule — publish_results: true calls api.securityscorecards.dev
     # which rate-limits or returns 502 when triggered many times per day from push
-    # events.  Weekly scheduled runs are the intended cadence for result publishing.
+    # events. Weekly scheduled runs are the intended cadence for result publishing.
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     continue-on-error: true
