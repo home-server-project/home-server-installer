@@ -449,7 +449,7 @@ func (m *Model) maxCursor() int {
 	switch m.Wizard.State.CurrentStep {
 	case model.StepWelcome:
 		if m.osSubView {
-			return 2 // Home Server uCore | Home Server uCore HCI
+			return len(homeServerImageOptions)
 		}
 		return m.channelCardCount()
 	case model.StepStorage:
@@ -475,14 +475,13 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	switch step {
 	case model.StepWelcome:
 		if m.osSubView {
-			images := []string{model.HomeServerUCoreImage, model.HomeServerUCoreHCIImage}
-			if m.cursor < 0 || m.cursor >= len(images) {
+			if m.cursor < 0 || m.cursor >= len(homeServerImageOptions) {
 				m.cursor = 0
 			}
 			cfg := &m.Wizard.State.Config
 			cfg.OS = model.OSFCOS
 			cfg.Channel = "stable"
-			cfg.HomeServerImage = images[m.cursor]
+			cfg.HomeServerImage = homeServerImageOptions[m.cursor].id
 			// FCOS is a short-lived bootstrap in the Home Server path. Generic
 			// sysext/swap/Tailscale/update-policy choices are deliberately skipped.
 			cfg.Sysexts = nil
@@ -574,7 +573,7 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 			}
 		}
 		if !hasAuth {
-			m.err = fmt.Errorf("no authentication configured \u2014 add an SSH key, set a password, or provide a GitHub username with public keys")
+			m.err = fmt.Errorf("no authentication configured — add an SSH key, set a password, or provide a GitHub username with public keys")
 			return m, nil
 		}
 	case model.StepInstall:
@@ -758,11 +757,13 @@ func (m *Model) initStepFields() {
 	m.fieldIdx = 0
 	switch m.Wizard.State.CurrentStep {
 	case model.StepWelcome:
-		// Home Server V1 exposes only the two supported uCore destinations.
 		m.osSubView = true
 		m.cursor = 0
-		if m.Wizard.State.Config.HomeServerImage == model.HomeServerUCoreHCIImage {
-			m.cursor = 1
+		for i, opt := range homeServerImageOptions {
+			if m.Wizard.State.Config.HomeServerImage == opt.id {
+				m.cursor = i
+				break
+			}
 		}
 		m.fields = nil
 	case model.StepNvidia:
@@ -1260,11 +1261,10 @@ func (m *Model) viewUpdate() string {
 }
 
 func installTargetDisplayName(cfg *model.InstallConfig) string {
-	switch cfg.HomeServerImage {
-	case model.HomeServerUCoreHCIImage:
-		return "Home Server uCore HCI"
-	case model.HomeServerUCoreImage:
-		return "Home Server uCore"
+	for _, opt := range homeServerImageOptions {
+		if cfg.HomeServerImage == opt.id {
+			return opt.name
+		}
 	}
 
 	switch cfg.OS {
