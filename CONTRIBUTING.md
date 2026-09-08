@@ -1,3 +1,4 @@
+<!-- Modified by Home Server Project from Project Bluefin Knuckle. -->
 # Contributing to Home Server Installer
 
 Thanks for contributing to Home Server Installer.
