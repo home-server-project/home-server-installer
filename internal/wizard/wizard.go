@@ -2,6 +2,8 @@
 // It manages installation state transitions and orchestrates the install flow.
 package wizard
 
+// Modified by Home Server Project from Project Bluefin Knuckle.
+
 import (
 	"context"
 	"fmt"
