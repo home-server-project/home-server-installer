@@ -1,3 +1,4 @@
+# Modified by Home Server Project from Project Bluefin Knuckle.
 name: Post-merge Home Server smoke
 
 on:
