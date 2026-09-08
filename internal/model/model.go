@@ -58,12 +58,12 @@ const (
 )
 
 // Home Server destination images. Fedora CoreOS is the live installer
-// environment; the selected signed uCore image is installed directly.
+// environment; the selected signed Gina or upstream uCore image is installed directly.
 // The installer intentionally exposes only LTS targets. Users who need a
 // stable/NVIDIA variant can bootc switch after installation.
 const (
-	HomeServerUCoreImage      = "ghcr.io/home-server-project/home-server-ucore:lts"
-	HomeServerUCoreHCIImage   = "ghcr.io/home-server-project/home-server-ucore-hci:lts"
+	HomeServerUCoreImage      = "ghcr.io/home-server-project/home-server-gina:lts"
+	HomeServerUCoreHCIImage   = "ghcr.io/home-server-project/home-server-gina-hci:lts"
 	UpstreamUCoreMinimalImage = "ghcr.io/ublue-os/ucore-minimal:lts"
 	UpstreamUCoreImage        = "ghcr.io/ublue-os/ucore:lts"
 	UpstreamUCoreHCIImage     = "ghcr.io/ublue-os/ucore-hci:lts"

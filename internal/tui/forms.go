@@ -363,7 +363,7 @@ func (m *Model) renderZenChrome() string {
 
 	// Subtitle + slogan
 	b.WriteString("  ")
-	b.WriteString(accentColor.Render("Home Server uCore installer"))
+	b.WriteString(accentColor.Render("Home Server Gina installer"))
 	b.WriteString("\n")
 	b.WriteString("  ")
 	b.WriteString(sloganStyle.Render("The real thing, right from the CNCF. Legends will rise."))
@@ -622,8 +622,8 @@ type homeServerImageOption struct {
 }
 
 var homeServerImageOptions = []homeServerImageOption{
-	{model.HomeServerUCoreImage, "Home Server uCore LTS", "Recommended Home Server Project image. Small downstream of Universal Blue uCore."},
-	{model.HomeServerUCoreHCIImage, "Home Server uCore HCI LTS", "Home Server Project virtualization/HCI image for libvirt/QEMU hosts."},
+	{model.HomeServerUCoreImage, "Home Server Gina LTS", "Recommended Home Server Project image. Small downstream of Universal Blue uCore LTS."},
+	{model.HomeServerUCoreHCIImage, "Home Server Gina HCI LTS", "Home Server Project Gina image for libvirt/QEMU virtualization hosts."},
 	{model.UpstreamUCoreMinimalImage, "uCore Minimal LTS", "Upstream Universal Blue lightweight image for containers and virtual machines."},
 	{model.UpstreamUCoreImage, "uCore LTS", "Upstream Universal Blue image for bare-metal and storage server workloads."},
 	{model.UpstreamUCoreHCIImage, "uCore HCI LTS", "Upstream Universal Blue image with libvirt/KVM virtualization tooling."},

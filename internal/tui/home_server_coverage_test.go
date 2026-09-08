@@ -14,8 +14,8 @@ func TestHomeServerInstallAndDoneNames(t *testing.T) {
 		image string
 		name  string
 	}{
-		{model.HomeServerUCoreImage, "Home Server uCore LTS"},
-		{model.HomeServerUCoreHCIImage, "Home Server uCore HCI LTS"},
+		{model.HomeServerUCoreImage, "Home Server Gina LTS"},
+		{model.HomeServerUCoreHCIImage, "Home Server Gina HCI LTS"},
 		{model.UpstreamUCoreMinimalImage, "uCore Minimal LTS"},
 		{model.UpstreamUCoreImage, "uCore LTS"},
 		{model.UpstreamUCoreHCIImage, "uCore HCI LTS"},
@@ -61,8 +61,8 @@ func TestHomeServerWelcomeExposesFiveLTSChoices(t *testing.T) {
 	}
 	out := m.viewOSPicker()
 	for _, name := range []string{
-		"Home Server uCore LTS",
-		"Home Server uCore HCI LTS",
+		"Home Server Gina LTS",
+		"Home Server Gina HCI LTS",
 		"uCore Minimal LTS",
 		"uCore LTS",
 		"uCore HCI LTS",

@@ -180,9 +180,9 @@ install -d -m0755 "$REGISTRIES_DIR"
 REGISTRIES_FILE="$(mktemp "${REGISTRIES_DIR}/00-home-server-installer.XXXXXX.yaml")"
 cat > "$REGISTRIES_FILE" <<'EOF_REGISTRIES'
 docker:
-  ghcr.io/home-server-project/home-server-ucore:
+  ghcr.io/home-server-project/home-server-gina:
     use-sigstore-attachments: true
-  ghcr.io/home-server-project/home-server-ucore-hci:
+  ghcr.io/home-server-project/home-server-gina-hci:
     use-sigstore-attachments: true
   ghcr.io/ublue-os/ucore-minimal:
     use-sigstore-attachments: true

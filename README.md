@@ -16,16 +16,16 @@
 > - **UEFI only** for the current V1 path.
 > - **Secure Boot must be disabled during installation.** After installation, follow the current [uCore Secure Boot instructions](https://github.com/ublue-os/ucore) if you want to enable Secure Boot.
 
-Home Server Installer is a friendly Fedora CoreOS-based installer for [Home Server uCore](https://github.com/home-server-project/home-server-ucore) and selected upstream [Universal Blue uCore](https://github.com/ublue-os/ucore) images.
+Home Server Installer is a friendly Fedora CoreOS-based installer for [Home Server Gina](https://github.com/home-server-project/home-server-gina) and selected upstream [Universal Blue uCore](https://github.com/ublue-os/ucore) images.
 
-It is a thin downstream adaptation of [Project Bluefin Knuckle](https://github.com/projectbluefin/knuckle). The goal is to keep Knuckle's proven TUI and hardware discovery while providing a Home Server-focused, signed, direct-install path for uCore.
+It is a thin downstream adaptation of [Project Bluefin Knuckle](https://github.com/projectbluefin/knuckle). The goal is to keep Knuckle's proven TUI and hardware discovery while providing a Home Server-focused, signed, direct-install path for Gina and uCore.
 
 ## V1 image choices
 
 The installer currently exposes five signed LTS targets:
 
-- `ghcr.io/home-server-project/home-server-ucore:lts` — Home Server uCore LTS (default/recommended).
-- `ghcr.io/home-server-project/home-server-ucore-hci:lts` — Home Server uCore HCI LTS.
+- `ghcr.io/home-server-project/home-server-gina:lts` — Home Server Gina LTS (default/recommended).
+- `ghcr.io/home-server-project/home-server-gina-hci:lts` — Home Server Gina HCI LTS.
 - `ghcr.io/ublue-os/ucore-minimal:lts` — upstream Universal Blue uCore Minimal LTS.
 - `ghcr.io/ublue-os/ucore:lts` — upstream Universal Blue uCore LTS.
 - `ghcr.io/ublue-os/ucore-hci:lts` — upstream Universal Blue uCore HCI LTS.
@@ -38,7 +38,7 @@ The installer intentionally keeps the menu to LTS targets. Stable, NVIDIA and cu
 Fedora CoreOS live ISO + Home Server Installer
                  |
                  v
-      choose signed uCore image
+     choose signed Gina/uCore image
       disk / boot layout / user / SSH
                  |
                  v
@@ -54,17 +54,17 @@ Fedora CoreOS live ISO + Home Server Installer
                reboot
                  |
                  v
-       selected uCore image boots
+       selected image boots
 ```
 
-The selected uCore image is installed directly as the first bootable deployment. There is no installed Fedora CoreOS intermediate and no first-boot autorebase step.
+The selected Gina or upstream uCore image is installed directly as the first bootable deployment. There is no installed Fedora CoreOS intermediate and no first-boot autorebase step.
 
 ## What to expect when booting and installing
 
 > [!NOTE]
 > **The installer may take a few minutes to appear after booting.** Fedora CoreOS is starting in the background before the Home Server Installer UI launches, so a short wait is normal.
 >
-> During installation, the progress bar may remain around **20% for several minutes** while the selected uCore container image is downloaded, verified, and deployed.
+> During installation, the progress bar may remain around **20% for several minutes** while the selected container image is downloaded, verified, and deployed.
 >
 > **This is expected. Do not power off or reboot the machine while installation is in progress.**
 >
@@ -83,7 +83,7 @@ V1 uses a direct Home Server storage layout on the user-selected target disk:
 - 1 MiB BIOS boot partition.
 - 512 MiB EFI System Partition.
 - ext4 XBOOTLDR `/boot` with one of two presets:
-  - **1 GiB** — standard and recommended for uCore / uCore HCI.
+  - **1 GiB** — standard and recommended for Gina / Gina HCI and upstream uCore targets.
   - **2 GiB** — large layout for NVIDIA or custom-image use cases.
 - XFS `/` using the remaining disk.
 
@@ -107,13 +107,13 @@ For SSH after installation:
 
 ## Builder template
 
-[Home Server uCore Builder](https://github.com/home-server-project/home-server-ucore-builder) is a separate GitHub template project for creating a personalized Home Server Installer ISO in the user's own GitHub account with GitHub Actions.
+[Home Server Gina Builder](https://github.com/home-server-project/home-server-gina-builder) is a separate GitHub template project for creating a personalized Home Server Installer ISO in the user's own GitHub account with GitHub Actions.
 
 The user creates a repository from the template, adds an `SSH_PUBLIC_KEY` repository Actions secret, and runs the build workflow. The Builder automatically resolves the **latest published Home Server Installer release** and builds the ISO from that exact release.
 
 Only the user's **public SSH key** is embedded. The private key stays on the user's own computer and is never uploaded to GitHub or embedded in the ISO.
 
-The Builder does not embed one selected uCore image. The personalized installer keeps all five V1 image choices, and the selected image is downloaded during installation. **An internet connection is required during the normal installation path.**
+The Builder does not embed one selected Gina/uCore image. The personalized installer keeps all five V1 image choices, and the selected image is downloaded during installation. **An internet connection is required during the normal installation path.**
 
 ## Upstream
 
@@ -121,8 +121,8 @@ This repository is derived from [Project Bluefin Knuckle](https://github.com/pro
 
 Related projects:
 
-- [Home Server uCore](https://github.com/home-server-project/home-server-ucore)
-- [Home Server uCore Builder](https://github.com/home-server-project/home-server-ucore-builder)
+- [Home Server Gina](https://github.com/home-server-project/home-server-gina)
+- [Home Server Gina Builder](https://github.com/home-server-project/home-server-gina-builder)
 - [Universal Blue uCore](https://github.com/ublue-os/ucore)
 - [Fedora CoreOS](https://fedoraproject.org/coreos/)
 
@@ -132,6 +132,6 @@ Related projects:
 
 See the [latest published release](https://github.com/home-server-project/home-server-installer/releases/latest) for the current version and release assets.
 
-The current direct-install path has successfully completed installation and first boot with both Home Server Project and upstream Universal Blue uCore targets. The personalized ISO path generated from a fresh Home Server uCore Builder template repository has also been validated.
+The current direct-install path has successfully completed installation and first boot with both Home Server Project and upstream Universal Blue uCore targets. The personalized ISO path generated from a fresh Home Server Gina Builder template repository has also been validated.
 
 VM testing is recommended first. Bare-metal testing can be done on a **dedicated test drive or test hardware where the selected installation disk can be safely erased**. Keep backups of any important data before testing.
