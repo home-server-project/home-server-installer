@@ -1,3 +1,4 @@
+<!-- Modified by Home Server Project from Project Bluefin Knuckle. -->
 # Release Checklist
 
 > **V1 note:** Home Server Installer V1 is currently validated through end-to-end VM installation. Before publishing a V1 release intended for broader testing, verify the current branch in a clean VM and keep bare-metal validation limited to a dedicated test drive or test hardware where the selected installation disk can be safely erased.
