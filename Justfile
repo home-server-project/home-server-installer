@@ -111,94 +111,9 @@ cover-html: cover
     go tool cover -html=cover.out -o cover.html
     @echo "open cover.html"
 
-# Per-package coverage gate. Mirrors docs/CI-AND-TESTING.md targets.
-# Exits non-zero if any package falls below its threshold.
-# Uses statement-count coverage from `go test -cover`, not function-average.
+# Per-package coverage gate. Thresholds and implementation live in scripts/cover-check.sh.
 cover-check:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    declare -A targets=(
-        [model]=100 [validate]=99 [ignition]=100 [github]=96
-        [bakery]=100 [probe]=100   [runner]=100   [install]=100
-        [headless]=99 [wizard]=99  [iso]=100      [tui]=99
-        [demo]=100   [fcos]=100
-    )
-    fail=0
-    for pkg in "${!targets[@]}"; do
-        pct=$(go test -count=1 -cover ./internal/${pkg}/... 2>/dev/null \
-            | awk '/coverage:/ {gsub("%",""); print $(NF-2); exit}')
-        pct=${pct%.*}
-        if [[ -z "$pct" ]]; then
-            echo "FAIL  internal/${pkg}   no coverage reported"
-            fail=1
-            continue
-        fi
-        if (( pct < ${targets[$pkg]} )); then
-            echo "FAIL  internal/${pkg}  ${pct}%  (target ${targets[$pkg]}%)"
-            fail=1
-        else
-            echo "ok    internal/${pkg}  ${pct}%  (target ${targets[$pkg]}%)"
-        fi
-    done
-    script_pkg=scripts/catalog_check
-    script_target=100
-    script_pct=$(go test -count=1 -cover ./${script_pkg} 2>/dev/null \
-        | awk '/coverage:/ {gsub("%",""); print $(NF-2); exit}')
-    script_pct=${script_pct%.*}
-    if [[ -z "$script_pct" ]]; then
-        echo "FAIL  ${script_pkg}   no coverage reported"
-        fail=1
-    elif (( script_pct < script_target )); then
-        echo "FAIL  ${script_pkg}  ${script_pct}%  (target ${script_target}%)"
-        fail=1
-    else
-        echo "ok    ${script_pkg}  ${script_pct}%  (target ${script_target}%)"
-    fi
-    cmd_pkg=cmd/knuckle
-    cmd_target=85
-    cmd_pct=$(go test -count=1 -cover ./${cmd_pkg}/... 2>/dev/null \
-        | awk '/coverage:/ {gsub("%",""); print $(NF-2); exit}')
-    cmd_pct=${cmd_pct%.*}
-    if [[ -z "$cmd_pct" ]]; then
-        echo "FAIL  ${cmd_pkg}   no coverage reported"
-        fail=1
-    elif (( cmd_pct < cmd_target )); then
-        echo "FAIL  ${cmd_pkg}  ${cmd_pct}%  (target ${cmd_target}%)"
-        fail=1
-    else
-        echo "ok    ${cmd_pkg}  ${cmd_pct}%  (target ${cmd_target}%)"
-    fi
-    cbf_pkg=cmd/compile-butane-fresh
-    cbf_target=100
-    cbf_pct=$(go test -count=1 -cover ./${cbf_pkg}/... 2>/dev/null \
-        | awk '/coverage:/ {gsub("%",""); print $(NF-2); exit}')
-    cbf_pct=${cbf_pct%.*}
-    if [[ -z "$cbf_pct" ]]; then
-        echo "FAIL  ${cbf_pkg}   no coverage reported"
-        fail=1
-    elif (( cbf_pct < cbf_target )); then
-        echo "FAIL  ${cbf_pkg}  ${cbf_pct}%  (target ${cbf_target}%)"
-        fail=1
-    else
-        echo "ok    ${cbf_pkg}  ${cbf_pct}%  (target ${cbf_target}%)"
-    fi
-    # cmd/nvidia-check — gated at 95% (run() is covered; main() wrapper is not).
-    # Depends on the run() refactor landing in #760. Gate prevents regression.
-    nvidia_pkg=cmd/nvidia-check
-    nvidia_target=95
-    nvidia_pct=$(go test -count=1 -cover ./${nvidia_pkg}/... 2>/dev/null \
-        | awk '/coverage:/ {gsub("%",""); print $(NF-2); exit}')
-    nvidia_pct=${nvidia_pct%.*}
-    if [[ -z "$nvidia_pct" ]]; then
-        echo "FAIL  ${nvidia_pkg}   no coverage reported"
-        fail=1
-    elif (( nvidia_pct < nvidia_target )); then
-        echo "FAIL  ${nvidia_pkg}  ${nvidia_pct}%  (target ${nvidia_target}%)"
-        fail=1
-    else
-        echo "ok    ${nvidia_pkg}  ${nvidia_pct}%  (target ${nvidia_target}%)"
-    fi
-    exit $fail
+    bash scripts/cover-check.sh
 
 # Quick headless dry-run test (no VM needed)
 headless-test:
