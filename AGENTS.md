@@ -1,3 +1,4 @@
+<!-- Modified by Home Server Project from Project Bluefin Knuckle. -->
 # Home Server Installer — Agent Guide
 
 This repository is the Home Server Project installer for signed uCore images. It is derived from Project Bluefin Knuckle, but the active product direction is the Home Server Installer V1 described in `README.md`.
