@@ -1,3 +1,4 @@
+<!-- Modified by Home Server Project from Project Bluefin Knuckle. -->
 # Home Server Installer documentation
 
 Supplementary documentation for the Home Server Installer V1.
