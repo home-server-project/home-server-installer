@@ -1,3 +1,4 @@
+<!-- Modified by Home Server Project from Project Bluefin Knuckle. -->
 <p align="center">
   <img src="https://raw.githubusercontent.com/home-server-project/.github/main/logo/banner-navy-mid.png" alt="Home Server Project banner">
 </p>
