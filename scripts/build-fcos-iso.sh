@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Modified by Home Server Project from Project Bluefin Knuckle.
 # Build a self-contained UEFI Fedora CoreOS live ISO containing Knuckle.
 #
 # The stock FCOS ISO reserves only 256 KiB for embedded live-Ignition data, so
