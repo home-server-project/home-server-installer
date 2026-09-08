@@ -8,7 +8,7 @@ Upstream project:
 
 This repository remains a GitHub fork of Knuckle and retains the upstream project history and Apache License 2.0. Home Server Project has substantially modified the fork for its Home Server installation flow and has also added Home Server-specific files.
 
-Files inherited from Knuckle and modified by Home Server Project are inventoried in MODIFICATIONS.md. That inventory also records which files already carry direct in-file modification notices and which large files still need those comments in a later patch-capable edit.
+Files inherited from Knuckle and modified by Home Server Project are inventoried in MODIFICATIONS.md and carry direct in-file modification notices.
 
 Home Server Project is independent and is not affiliated with, sponsored by, or endorsed by Project Bluefin, Universal Blue, or the Fedora Project. References to Knuckle, Project Bluefin, Universal Blue, uCore, Fedora, and Fedora CoreOS identify upstream projects and technologies.
 
