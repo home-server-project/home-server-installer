@@ -21,6 +21,8 @@
 // be added via the Builder, not by extending butaneTemplate.
 package ignition
 
+// Modified by Home Server Project from Project Bluefin Knuckle.
+
 import (
 	"bytes"
 	"fmt"
