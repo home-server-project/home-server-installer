@@ -1,3 +1,4 @@
+// Modified by Home Server Project from Project Bluefin Knuckle.
 // Package model defines the core data types for the knuckle installer.
 // This is a leaf package with zero external dependencies.
 package model
