@@ -1,3 +1,4 @@
+<!-- Modified by Home Server Project from Project Bluefin Knuckle. -->
 # Security
 
 Home Server Installer is a privileged installer. V1 is designed around a small, explicit trust and disk-safety model.
