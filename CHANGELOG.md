@@ -1,3 +1,4 @@
+<!-- Modified by Home Server Project from Project Bluefin Knuckle. -->
 # Changelog
 
 This changelog tracks the Home Server Installer fork and its Home Server-specific work.
