@@ -1,5 +1,6 @@
 # Knuckle — Flatcar Container Linux TUI Installer
 # https://github.com/castrojo/knuckle
+# Modified by Home Server Project from Project Bluefin Knuckle.
 
 # Target architecture for build/ISO/VM recipes. Override with: KNUCKLE_ARCH=arm64 just <recipe>
 KNUCKLE_ARCH := env_var_or_default("KNUCKLE_ARCH", "amd64")
