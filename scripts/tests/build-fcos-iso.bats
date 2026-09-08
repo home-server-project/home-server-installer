@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# Modified by Home Server Project from Project Bluefin Knuckle.
 # Tests for scripts/build-fcos-iso.sh argument validation and packaging contract.
 # Requires: bats-core (https://github.com/bats-core/bats-core)
 #
