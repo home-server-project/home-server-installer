@@ -350,23 +350,23 @@ func (m *Model) renderZenChrome() string {
 	sloganStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("250")).Italic(true)
 
 	// Pretext
-	b.WriteString(presentsStyle.Render("  Home Server Project · powered by Project Bluefin Knuckle"))
+	b.WriteString(presentsStyle.Render("  Home Server Project · based on Project Bluefin Knuckle"))
 	b.WriteString("\n\n")
 
 	// Logo: spaced letterform in double-line frame
 	b.WriteString(logoLo.Render("╔══════════════════════════════════════════════════════════╗"))
 	b.WriteString("\n")
-	b.WriteString(logoLo.Render("║") + "     " + logoHi.Render("K N U C K L E") + "                                        " + logoLo.Render("║"))
+	b.WriteString(logoLo.Render("║") + "        " + logoHi.Render("H O M E   S E R V E R   I N S T A L L E R") + "         " + logoLo.Render("║"))
 	b.WriteString("\n")
 	b.WriteString(logoLo.Render("╚══════════════════════════════════════════════════════════╝"))
 	b.WriteString("\n")
 
 	// Subtitle + slogan
 	b.WriteString("  ")
-	b.WriteString(accentColor.Render("Home Server Gina installer"))
+	b.WriteString(accentColor.Render("Friendly installer for Home Server Gina and Universal Blue uCore LTS"))
 	b.WriteString("\n")
 	b.WriteString("  ")
-	b.WriteString(sloganStyle.Render("The real thing, right from the CNCF. Legends will rise."))
+	b.WriteString(sloganStyle.Render("Cloud-native technology, brought home."))
 	b.WriteString("\n\n")
 
 	// Info line: version + system dots (skip on Welcome — cards show it)
@@ -622,11 +622,11 @@ type homeServerImageOption struct {
 }
 
 var homeServerImageOptions = []homeServerImageOption{
-	{model.HomeServerUCoreImage, "Home Server Gina LTS", "Recommended Home Server Project image. Small downstream of Universal Blue uCore LTS."},
-	{model.HomeServerUCoreHCIImage, "Home Server Gina HCI LTS", "Home Server Project Gina image for libvirt/QEMU virtualization hosts."},
-	{model.UpstreamUCoreMinimalImage, "uCore Minimal LTS", "Upstream Universal Blue lightweight image for containers and virtual machines."},
-	{model.UpstreamUCoreImage, "uCore LTS", "Upstream Universal Blue image for bare-metal and storage server workloads."},
-	{model.UpstreamUCoreHCIImage, "uCore HCI LTS", "Upstream Universal Blue image with libvirt/KVM virtualization tooling."},
+	{model.HomeServerUCoreImage, "Home Server Gina LTS", "Home Server Project image based on Universal Blue uCore LTS."},
+	{model.HomeServerUCoreHCIImage, "Home Server Gina HCI LTS", "Home Server Project image based on uCore HCI LTS for virtualization hosts."},
+	{model.UpstreamUCoreMinimalImage, "uCore Minimal LTS", "Upstream Universal Blue lightweight image."},
+	{model.UpstreamUCoreImage, "uCore LTS", "Upstream Universal Blue server image."},
+	{model.UpstreamUCoreHCIImage, "uCore HCI LTS", "Upstream Universal Blue HCI image with virtualization tooling."},
 }
 
 // viewOSPicker renders the supported signed LTS uCore destination images.
@@ -649,7 +649,7 @@ func (m *Model) viewOSPicker() string {
 	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
-	b.WriteString("  Select Home Server image:\n\n")
+	b.WriteString("  Select installation target:\n\n")
 
 	for i, opt := range homeServerImageOptions {
 		selected := i == m.cursor
