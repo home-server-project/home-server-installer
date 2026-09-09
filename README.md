@@ -29,9 +29,9 @@ That path is intended for users who want to work with the Installer source itsel
 </details>
 
 > [!WARNING]
-> **VM testing is recommended first.**
+> **Installation erases the selected target disk.**
 >
-> The current V1 path is UEFI-only. Secure Boot must be disabled during installation. The Installer erases and repartitions only the target disk selected in the TUI, so use a dedicated test drive or hardware where that disk can be safely erased and keep backups of anything important.
+> The current V1 path is UEFI-only. Secure Boot must be disabled during installation. The Installer erases and repartitions only the target disk selected in the TUI, so verify the selected disk before confirming installation and keep backups of anything important.
 
 ## Installer choices
 
@@ -81,6 +81,34 @@ The selected Gina or upstream uCore image is installed directly as the first boo
 >
 > **This is expected. Do not power off or reboot the machine while installation is in progress.**
 
+## Tested installation paths
+
+Home Server Installer V1 has been successfully tested using personalized ISOs created with [Home Server Gina Builder](https://github.com/home-server-project/home-server-gina-builder).
+
+Tested boot and installation methods:
+
+- Virtual machine
+- Dedicated USB installer written directly to the drive, such as with Rufus, `dd`, or similar tools
+- Ventoy USB
+
+Bare-metal validation was completed on:
+
+- ASUS VivoBook X412DA-AB31
+- AMD Ryzen 3 3200U
+- AMD Radeon Vega 3
+- 12 GB DDR4
+- 128 GB SSD
+- USB Ethernet adapter using DHCP
+
+Successful bare-metal installations included:
+
+- **Home Server Gina HCI LTS** with a **1 GiB `/boot`**
+- **Universal Blue uCore LTS** with a **2 GiB `/boot`**
+
+Both installations completed successfully, rebooted into the selected image, and produced the expected disk layout.
+
+Startup and installation time can vary depending on the USB drive, USB interface, network connection, and boot method.
+
 ## Storage and disk safety
 
 V1 uses a direct Home Server storage layout on the selected target disk:
@@ -91,6 +119,8 @@ V1 uses a direct Home Server storage layout on the selected target disk:
   - **1 GiB** — standard and recommended for Gina, Gina HCI and upstream uCore targets
   - **2 GiB** — larger layout for NVIDIA or custom-image use cases
 - XFS `/` using the remaining disk
+
+Both `/boot` layouts have now been successfully validated on bare metal: 1 GiB with Home Server Gina HCI LTS and 2 GiB with upstream uCore LTS.
 
 The selected disk is revalidated immediately before destructive partitioning, including device identity, expected size, serial when available and mounted-filesystem checks.
 
@@ -103,6 +133,13 @@ The Installer can create the primary user during installation and supports a loc
 Password-backed users keep normal password-required `sudo` behavior. The SSH-key-only/passwordless administration path is available but remains part of ongoing end-to-end validation.
 
 A public SSH key can be supplied when building a personalized ISO. Only the public key belongs in the ISO; private SSH keys must remain on the user's own computer.
+
+> [!NOTE]
+> When the ISO was built with an SSH public key attached through Home Server Gina Builder, Fedora CoreOS may still display:
+>
+> `No SSH authorized keys provided by Ignition or Afterburn`
+>
+> This message can be ignored for this installation path. The SSH key configured in the personalized installer ISO is handled by Home Server Installer and is not supplied through Fedora CoreOS Ignition or Afterburn.
 
 For the normal personalized-ISO workflow, use [Home Server Gina Builder](https://github.com/home-server-project/home-server-gina-builder), which handles the public-key handoff without requiring changes to Installer source.
 
@@ -123,7 +160,9 @@ The current V1 path includes:
 - signed Gina and upstream uCore LTS image selection
 - direct bootc installation to the selected disk
 
-VM testing remains the recommended first step before controlled bare-metal use.
+V1 has been validated in virtual machines and on bare metal using both direct-write USB media and Ventoy.
+
+**A VM walk-through is recommended before the first bare-metal installation.**
 
 ## Upstream and references
 
