@@ -9,7 +9,7 @@
 
 Home Server Installer is a friendly Fedora CoreOS-based installer for [Home Server Gina](https://github.com/home-server-project/home-server-gina) and selected upstream [Universal Blue uCore](https://github.com/ublue-os/ucore) LTS images.
 
-It is a thin downstream adaptation of [Project Bluefin Knuckle](https://github.com/projectbluefin/knuckle), keeping Knuckle's TUI and hardware-discovery approach while providing a Home Server-focused, signed, direct-install path.
+Home Server Installer is based on [Project Bluefin Knuckle](https://github.com/projectbluefin/knuckle), Project Bluefin's interactive TUI installer project. Home Server Project adapts that foundation for a Home Server-focused, signed, direct-install path while retaining Knuckle's TUI and hardware-discovery approach.
 
 ## How it fits
 
@@ -141,4 +141,4 @@ VM testing remains the recommended first step before controlled bare-metal use.
 
 ## License
 
-Apache-2.0. This repository is derived from Project Bluefin Knuckle and retains its upstream project history and attribution. Third-party software and upstream components retain their own licenses.
+Apache-2.0. Home Server Installer is a modified derivative of Project Bluefin Knuckle and retains the applicable upstream license, project history, attribution and modification notices. Third-party software and upstream components retain their own licenses.
