@@ -11,20 +11,47 @@ Home Server Installer is a friendly Fedora CoreOS-based installer for [Home Serv
 
 Home Server Installer is based on [Project Bluefin Knuckle](https://github.com/projectbluefin/knuckle), Project Bluefin's interactive TUI installer project. Home Server Project adapts that foundation for a Home Server-focused, signed, direct-install path while retaining Knuckle's TUI and hardware-discovery approach.
 
+## Get the installer
+
+There are two supported ways to get installation media.
+
+### Official release ISO
+
+[**Open the latest Home Server Installer release**](https://github.com/home-server-project/home-server-installer/releases/latest) and download the published amd64 ISO.
+
+This is the simplest path. The release ISO is generic: boot it, choose the operating-system image, then configure the user, password and/or SSH access during installation.
+
+Each Installer release publishes its own ISO, checksum and signed release artifacts. That ISO stays tied to the Installer release and Fedora CoreOS live environment used when that release was built. The selected Gina/uCore LTS image is still downloaded during installation, so the operating-system image itself is not embedded or frozen inside the ISO.
+
+### Personalized ISO with Gina Builder
+
+[Home Server Gina Builder](https://github.com/home-server-project/home-server-gina-builder) is optional. It creates a personalized ISO with your SSH public key already embedded, so you do not need to type or paste that key during installation.
+
+The Builder uses the latest published Home Server Installer release, then builds fresh installation media from that released Installer code and the current Fedora CoreOS stable live image available when the Builder workflow runs.
+
+<details>
+<summary><strong>Which ISO should I use?</strong></summary>
+
+- **Official release ISO** — easiest generic download; configure password or SSH access during installation.
+- **Gina Builder ISO** — useful when you want your SSH public key already included and a freshly built Fedora CoreOS live environment.
+
+Both paths use the same released Home Server Installer code. Gina Builder changes the installation media by adding the supplied public SSH key and rebuilding against the current Fedora CoreOS stable live image; it does not change the supported Gina/uCore installation targets.
+
+</details>
+
 ## How it fits
 
-- **Home Server Gina Builder** creates the personalized bootable ISO for the normal user path.
-- **Home Server Installer** runs from that ISO and handles image selection, disk selection, partitioning, user setup and installation.
+- **Home Server Installer releases** publish a ready-to-use generic installation ISO.
+- **Home Server Gina Builder** optionally creates a personalized ISO from the latest published Installer release and embeds your SSH public key.
+- **Home Server Installer** runs from either ISO and handles image selection, disk selection, partitioning, user setup and installation.
 - **Home Server Gina or upstream uCore** is the operating-system image selected and installed by the user.
-
-For most users, the recommended starting point is [Home Server Gina Builder](https://github.com/home-server-project/home-server-gina-builder).
 
 <details>
 <summary><strong>Advanced/local use</strong></summary>
 
 The Installer can also be built and used directly from this repository for local development, testing and advanced workflows without using the Builder template.
 
-That path is intended for users who want to work with the Installer source itself rather than simply create a personalized ISO.
+That path is intended for users who want to work with the Installer source itself rather than simply use released installation media.
 
 </details>
 
@@ -105,7 +132,9 @@ The selected Gina or upstream uCore image is installed directly as the first boo
 
 ## Tested installation paths
 
-Home Server Installer V1 has been successfully tested using personalized ISOs created with [Home Server Gina Builder](https://github.com/home-server-project/home-server-gina-builder).
+Home Server Installer V1 has been successfully tested in virtual machines and on bare metal. Personalized ISOs created with [Home Server Gina Builder](https://github.com/home-server-project/home-server-gina-builder) were used for some of this validation because they were convenient for SSH-key testing; the Builder is not required to use the Installer.
+
+The official release ISO and personalized Builder ISO use the same released Home Server Installer code and the same ISO build path. The Builder additionally embeds the supplied SSH public key and rebuilds against the current Fedora CoreOS stable live image.
 
 Tested boot and installation methods:
 
@@ -154,9 +183,13 @@ VM testing has also verified that a separate attached non-target sentinel disk r
 
 The Installer can create the primary user during installation and supports a local password, SSH authorized keys, or a key-only administration path.
 
+With the **official generic ISO**, configure access during installation. You can set a password, paste an SSH public key, or enter a GitHub username so the Installer can fetch that account's published SSH public keys.
+
+With a **personalized Gina Builder ISO**, the public SSH key supplied through the Builder repository secret is already embedded in the installation media and handed to the Installer automatically.
+
 Password-backed users keep normal password-required `sudo` behavior. The SSH-key-only/passwordless administration path is available but remains part of ongoing end-to-end validation.
 
-A public SSH key can be supplied when building a personalized ISO. Only the public key belongs in the ISO; private SSH keys must remain on the user's own computer.
+Only public SSH keys belong in installation media. Private SSH keys must remain on the user's own computer.
 
 > [!NOTE]
 > When the ISO was built with an SSH public key attached through Home Server Gina Builder, Fedora CoreOS may still display:
@@ -164,8 +197,6 @@ A public SSH key can be supplied when building a personalized ISO. Only the publ
 > `No SSH authorized keys provided by Ignition or Afterburn`
 >
 > This message can be ignored for this installation path. The SSH key configured in the personalized installer ISO is handled by Home Server Installer and is not supplied through Fedora CoreOS Ignition or Afterburn.
-
-For the normal personalized-ISO workflow, use [Home Server Gina Builder](https://github.com/home-server-project/home-server-gina-builder), which handles the public-key handoff without requiring changes to Installer source.
 
 ## Image verification
 
