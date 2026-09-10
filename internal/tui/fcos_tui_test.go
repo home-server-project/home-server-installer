@@ -19,11 +19,11 @@ func TestOSPicker_ShowsHomeServerTargets(t *testing.T) {
 		t.Fatal("osSubView should be true after New() at StepWelcome")
 	}
 	out := m.viewChannelCards()
-	if !strings.Contains(out, "Home Server uCore") {
-		t.Errorf("picker should show Home Server uCore: %q", out)
+	if !strings.Contains(out, "Home Server Gina") {
+		t.Errorf("picker should show Home Server Gina: %q", out)
 	}
-	if !strings.Contains(out, "Home Server uCore HCI") {
-		t.Errorf("picker should show Home Server uCore HCI: %q", out)
+	if !strings.Contains(out, "Home Server Gina HCI") {
+		t.Errorf("picker should show Home Server Gina HCI: %q", out)
 	}
 	if strings.Contains(out, "Flatcar Container Linux") || strings.Contains(out, "Bluefin Server") {
 		t.Errorf("Home Server V1 picker should hide generic OS targets: %q", out)
