@@ -139,7 +139,8 @@ Tested boot and installation methods:
 - Dedicated USB installer written directly to the drive, such as with Rufus, `dd`, or similar tools
 - Ventoy USB
 
-Bare-metal validation was completed on:
+<details>
+<summary><strong>Bare-metal validation hardware</strong></summary>
 
 - ASUS VivoBook X412DA-AB31
 - AMD Ryzen 3 3200U
@@ -147,6 +148,8 @@ Bare-metal validation was completed on:
 - 12 GB DDR4
 - 128 GB SSD
 - USB Ethernet adapter using DHCP
+
+</details>
 
 Successful bare-metal installations included:
 
