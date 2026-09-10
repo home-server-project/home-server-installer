@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	homeServerFamilyGina      = "gina"
-	homeServerFamilyUCore     = "ucore"
-	homeServerFamilyNvidia    = "ucore-nvidia"
-	homeServerFamilyNvidiaLTS = "ucore-nvidia-lts"
+	homeServerFamilyGina      = "family:gina"
+	homeServerFamilyUCore     = "family:ucore"
+	homeServerFamilyNvidia    = "family:ucore-nvidia"
+	homeServerFamilyNvidiaLTS = "family:ucore-nvidia-lts"
 )
 
 type homeServerImageFamily struct {
