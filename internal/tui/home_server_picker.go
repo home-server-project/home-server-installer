@@ -92,6 +92,42 @@ func homeServerFamilyDisplayName(family string) string {
 	return ""
 }
 
+// syncHomeServerPickerOptions keeps the legacy Welcome picker slice aligned
+// with the current family sub-step. tui.go can therefore keep its existing
+// cursor and Enter handling while the picker becomes hierarchical.
+func (m *Model) syncHomeServerPickerOptions() {
+	image := m.Wizard.State.Config.HomeServerImage
+
+	if strings.HasPrefix(image, "family:") {
+		family := image
+		editions := homeServerOptionsForFamily(family)
+		homeServerImageOptions = make([]homeServerImageOption, 0, len(editions))
+		for _, opt := range editions {
+			homeServerImageOptions = append(homeServerImageOptions, homeServerImageOption(opt))
+		}
+		m.cursor = 0
+		return
+	}
+
+	if family, selected, ok := homeServerFamilyForImage(image); ok {
+		editions := homeServerOptionsForFamily(family)
+		homeServerImageOptions = make([]homeServerImageOption, 0, len(editions))
+		for _, opt := range editions {
+			homeServerImageOptions = append(homeServerImageOptions, homeServerImageOption(opt))
+		}
+		m.cursor = selected
+		return
+	}
+
+	homeServerImageOptions = make([]homeServerImageOption, 0, len(homeServerImageFamilies))
+	for _, family := range homeServerImageFamilies {
+		homeServerImageOptions = append(homeServerImageOptions, homeServerImageOption{
+			id: family.id, name: family.name, desc: family.desc,
+		})
+	}
+	m.cursor = 0
+}
+
 func renderHomeServerCards(title string, cursor int, namesAndDescriptions [][2]string) string {
 	var b strings.Builder
 
@@ -142,7 +178,10 @@ func renderHomeServerCards(title string, cursor int, namesAndDescriptions [][2]s
 }
 
 func (m *Model) viewHomeServerPicker() string {
-	if m.homeServerFamily == "" {
+	m.syncHomeServerPickerOptions()
+	image := m.Wizard.State.Config.HomeServerImage
+
+	if image == "" {
 		items := make([][2]string, 0, len(homeServerImageFamilies))
 		for _, family := range homeServerImageFamilies {
 			items = append(items, [2]string{family.name, family.desc})
@@ -150,13 +189,19 @@ func (m *Model) viewHomeServerPicker() string {
 		return renderHomeServerCards("Select installation family:", m.cursor, items)
 	}
 
-	options := homeServerOptionsForFamily(m.homeServerFamily)
+	family := image
+	if !strings.HasPrefix(family, "family:") {
+		if resolved, _, ok := homeServerFamilyForImage(image); ok {
+			family = resolved
+		}
+	}
+	options := homeServerOptionsForFamily(family)
 	items := make([][2]string, 0, len(options))
 	for _, opt := range options {
 		items = append(items, [2]string{opt.name, opt.desc})
 	}
 	title := "Select edition:"
-	if familyName := homeServerFamilyDisplayName(m.homeServerFamily); familyName != "" {
+	if familyName := homeServerFamilyDisplayName(family); familyName != "" {
 		title = "Select " + familyName + " edition:"
 	}
 	return renderHomeServerCards(title, m.cursor, items)
