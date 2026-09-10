@@ -11,7 +11,7 @@ import (
 
 // ── Home Server target picker ────────────────────────────────────────────────
 
-func TestOSPicker_ShowsHomeServerTargets(t *testing.T) {
+func TestOSPicker_ShowsHomeServerFamilies(t *testing.T) {
 	w := newTestWizard()
 	w.State.CurrentStep = model.StepWelcome
 	m := New(w)
@@ -19,24 +19,43 @@ func TestOSPicker_ShowsHomeServerTargets(t *testing.T) {
 		t.Fatal("osSubView should be true after New() at StepWelcome")
 	}
 	out := m.viewChannelCards()
-	if !strings.Contains(out, "Home Server Gina") {
-		t.Errorf("picker should show Home Server Gina: %q", out)
+	for _, want := range []string{
+		"Home Server Gina LTS",
+		"Universal Blue uCore LTS",
+		"NVIDIA Open",
+		"NVIDIA LTS",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("family picker should show %q: %q", want, out)
+		}
 	}
-	if !strings.Contains(out, "Home Server Gina HCI") {
-		t.Errorf("picker should show Home Server Gina HCI: %q", out)
+	if strings.Contains(out, "Gina HCI LTS") {
+		t.Errorf("family picker should not show Gina editions before family selection: %q", out)
 	}
-	if strings.Contains(out, "Flatcar Container Linux") || strings.Contains(out, "Bluefin Server") {
-		t.Errorf("Home Server V1 picker should hide generic OS targets: %q", out)
+	if !strings.Contains(out, "All installer choices use LTS. Switch to stable/testing later with bootc.") {
+		t.Errorf("family picker should show LTS guidance: %q", out)
 	}
 }
 
-func TestOSPicker_SelectHomeServerUCore_AdvancesToNetwork(t *testing.T) {
+func TestOSPicker_SelectGinaThenEdition_AdvancesToNetwork(t *testing.T) {
 	w := newTestWizard()
 	w.State.CurrentStep = model.StepWelcome
 	m := New(w)
+
+	// First Enter selects the Gina family and stays on Welcome.
 	m.cursor = 0
 	_, _ = m.handleEnter()
+	if m.Wizard.State.CurrentStep != model.StepWelcome {
+		t.Fatalf("family selection should stay on StepWelcome, got %v", m.Wizard.State.CurrentStep)
+	}
+	out := m.viewChannelCards()
+	if !strings.Contains(out, "Gina LTS") || !strings.Contains(out, "Gina HCI LTS") {
+		t.Fatalf("Gina edition picker missing expected editions: %q", out)
+	}
 
+	// Second Enter selects Gina LTS and continues to Network.
+	m.cursor = 0
+	_, _ = m.handleEnter()
 	if m.Wizard.State.Config.OS != model.OSFCOS {
 		t.Errorf("expected bootstrap OS=fcos, got %q", m.Wizard.State.Config.OS)
 	}
@@ -51,10 +70,14 @@ func TestOSPicker_SelectHomeServerUCore_AdvancesToNetwork(t *testing.T) {
 	}
 }
 
-func TestOSPicker_SelectHomeServerUCoreHCI_AdvancesToNetwork(t *testing.T) {
+func TestOSPicker_SelectGinaHCI_AdvancesToNetwork(t *testing.T) {
 	w := newTestWizard()
 	w.State.CurrentStep = model.StepWelcome
 	m := New(w)
+
+	m.cursor = 0
+	_, _ = m.handleEnter()
+	_ = m.viewChannelCards() // synchronize Gina edition choices
 	m.cursor = 1
 	_, _ = m.handleEnter()
 
@@ -63,6 +86,31 @@ func TestOSPicker_SelectHomeServerUCoreHCI_AdvancesToNetwork(t *testing.T) {
 	}
 	if m.Wizard.State.CurrentStep != model.StepNetwork {
 		t.Errorf("expected StepNetwork, got %v", m.Wizard.State.CurrentStep)
+	}
+}
+
+func TestOSPicker_NvidiaFamiliesUseExpectedTags(t *testing.T) {
+	tests := []struct {
+		familyCursor int
+		wantImage    string
+	}{
+		{2, model.UpstreamUCoreMinimalNvidiaImage},
+		{3, model.UpstreamUCoreMinimalNvidiaLTSImage},
+	}
+
+	for _, tc := range tests {
+		w := newTestWizard()
+		w.State.CurrentStep = model.StepWelcome
+		m := New(w)
+		_ = m.viewChannelCards() // synchronize family choices
+		m.cursor = tc.familyCursor
+		_, _ = m.handleEnter()
+		_ = m.viewChannelCards() // synchronize selected family's editions
+		m.cursor = 0
+		_, _ = m.handleEnter()
+		if m.Wizard.State.Config.HomeServerImage != tc.wantImage {
+			t.Errorf("family cursor %d selected %q, want %q", tc.familyCursor, m.Wizard.State.Config.HomeServerImage, tc.wantImage)
+		}
 	}
 }
 
