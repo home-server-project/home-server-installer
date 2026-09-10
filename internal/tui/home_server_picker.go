@@ -22,7 +22,7 @@ type homeServerImageFamily struct {
 	desc string
 }
 
-type homeServerImageOption struct {
+type homeServerEditionOption struct {
 	id   string
 	name string
 	desc string
@@ -35,7 +35,7 @@ var homeServerImageFamilies = []homeServerImageFamily{
 	{homeServerFamilyNvidiaLTS, "Universal Blue uCore LTS\n  NVIDIA LTS", "Universal Blue uCore images with the NVIDIA LTS driver."},
 }
 
-var homeServerImagesByFamily = map[string][]homeServerImageOption{
+var homeServerImagesByFamily = map[string][]homeServerEditionOption{
 	homeServerFamilyGina: {
 		{model.HomeServerUCoreImage, "Gina LTS", "Home Server Project image based on Universal Blue uCore LTS."},
 		{model.HomeServerUCoreHCIImage, "Gina HCI LTS", "Home Server Project image based on uCore HCI LTS for virtualization hosts."},
@@ -57,7 +57,7 @@ var homeServerImagesByFamily = map[string][]homeServerImageOption{
 	},
 }
 
-func homeServerOptionsForFamily(family string) []homeServerImageOption {
+func homeServerOptionsForFamily(family string) []homeServerEditionOption {
 	return homeServerImagesByFamily[family]
 }
 
