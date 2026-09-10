@@ -17,8 +17,8 @@ func TestRenderZenChrome_WelcomeStep(t *testing.T) {
 	m := New(w)
 	out := m.renderZenChrome()
 	// Welcome step skips the version info bar
-	if !strings.Contains(out, "K N U C K L E") {
-		t.Errorf("renderZenChrome missing logo: %q", out)
+	if !strings.Contains(out, "H O M E   S E R V E R   I N S T A L L E R") {
+		t.Errorf("renderZenChrome missing Home Server Installer logo: %q", out)
 	}
 }
 
