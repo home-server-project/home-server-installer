@@ -27,7 +27,9 @@ func homeServerImageVerificationKey(image string) (string, bool) {
 	switch image {
 	case model.HomeServerUCoreImage, model.HomeServerUCoreHCIImage:
 		return homeServerInstallerCosignPublicKey, true
-	case model.UpstreamUCoreMinimalImage, model.UpstreamUCoreImage, model.UpstreamUCoreHCIImage:
+	case model.UpstreamUCoreMinimalImage, model.UpstreamUCoreImage, model.UpstreamUCoreHCIImage,
+		model.UpstreamUCoreMinimalNvidiaImage, model.UpstreamUCoreNvidiaImage, model.UpstreamUCoreHCINvidiaImage,
+		model.UpstreamUCoreMinimalNvidiaLTSImage, model.UpstreamUCoreNvidiaLTSImage, model.UpstreamUCoreHCINvidiaLTSImage:
 		return upstreamUCoreCosignPublicKey, true
 	default:
 		return "", false
@@ -467,6 +469,10 @@ func (i *HomeServerInstaller) Install(ctx context.Context, cfg *model.InstallCon
 	}
 	defer func() { _ = os.Remove(keyFile) }()
 
+	imageRepository := cfg.HomeServerImage
+	if colon := strings.LastIndex(imageRepository, ":"); colon > strings.LastIndex(imageRepository, "/") {
+		imageRepository = imageRepository[:colon]
+	}
 	policy := fmt.Sprintf(`{
   "default": [{"type":"reject"}],
   "transports": {
@@ -479,7 +485,7 @@ func (i *HomeServerInstaller) Install(ctx context.Context, cfg *model.InstallCon
     }
   }
 }
-`, strings.TrimSuffix(cfg.HomeServerImage, ":lts"), keyFile)
+`, imageRepository, keyFile)
 	policyFile, err := writePrivateTemp("knuckle-home-server-policy-*", policy)
 	if err != nil {
 		return fmt.Errorf("writing temporary signature policy: %w", err)

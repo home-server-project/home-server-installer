@@ -22,6 +22,7 @@ The following inherited files were modified by Home Server Project and carry an 
 - CONTRIBUTING.md
 - Justfile
 - README.md
+- cmd/knuckle/main.go
 - docs/README.md
 - docs/RELEASE.md
 - docs/SECURITY.md

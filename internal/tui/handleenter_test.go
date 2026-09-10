@@ -126,6 +126,15 @@ func TestHandleEnter_Welcome_HomeServerUCore(t *testing.T) {
 	w.State.CurrentStep = model.StepWelcome
 
 	m := New(w)
+	_ = m.viewChannelCards() // family picker
+	m.cursor = 0
+	_, _ = m.handleEnter()
+
+	if m.Wizard.State.CurrentStep != model.StepWelcome {
+		t.Fatalf("family selection should stay on Welcome, got %v", m.Wizard.State.CurrentStep)
+	}
+
+	_ = m.viewChannelCards() // Gina editions
 	m.cursor = 0
 	_, _ = m.handleEnter()
 
@@ -150,16 +159,16 @@ func TestHandleEnter_Welcome_WithIgnitionURL(t *testing.T) {
 	w.State.Config.IgnitionURL = "https://example.com/config.ign"
 
 	m := New(w)
-	// Phase 1: OS picker — select Flatcar
+	_ = m.viewChannelCards()
 	m.cursor = 0
-	_, _ = m.handleEnter()
-
-	// Phase 2: channel picker — with IgnitionURL set, should skip to Storage
+	_, _ = m.handleEnter() // Gina family
+	_ = m.viewChannelCards()
 	m.cursor = 0
-	_, _ = m.handleEnter()
+	_, _ = m.handleEnter() // Gina LTS -> Network
+	_, _ = m.handleEnter() // Network -> Storage
 
 	if m.Wizard.State.CurrentStep != model.StepStorage {
-		t.Errorf("expected StepStorage (IgnitionURL skip), got %v", m.Wizard.State.CurrentStep)
+		t.Errorf("expected StepStorage after Home Server selection and network step, got %v", m.Wizard.State.CurrentStep)
 	}
 }
 
@@ -254,7 +263,7 @@ func TestMaxCursor_AllSteps(t *testing.T) {
 		disks  int
 		expect int
 	}{
-		{model.StepWelcome, 0, len(homeServerImageOptions)},
+		{model.StepWelcome, 0, len(homeServerImageFamilies)},
 		{model.StepStorage, 3, 3}, // number of disks
 		{model.StepStorage, 0, 0}, // no disks
 		{model.StepSysext, 0, 0},  // empty sysexts
@@ -271,6 +280,9 @@ func TestMaxCursor_AllSteps(t *testing.T) {
 			w.State.Disks = append(w.State.Disks, model.DiskInfo{DevPath: "/dev/vda"})
 		}
 		m := New(w)
+		if tc.step == model.StepWelcome {
+			_ = m.viewChannelCards() // ensure family picker is synchronized
+		}
 		got := m.maxCursor()
 		if got != tc.expect {
 			t.Errorf("maxCursor(%v, disks=%d) = %d, want %d", tc.step, tc.disks, got, tc.expect)
@@ -291,15 +303,17 @@ func TestMaxCursor_SysextWithEntries(t *testing.T) {
 	}
 }
 
-// --- handleEnter: BluefinDDI OS picker ---
-
 func TestHandleEnter_Welcome_HomeServerUCoreHCI(t *testing.T) {
 	w := newTestWizard()
 	w.State.CurrentStep = model.StepWelcome
 
 	m := New(w)
+	_ = m.viewChannelCards()
+	m.cursor = 0
+	_, _ = m.handleEnter() // Gina family
+	_ = m.viewChannelCards()
 	m.cursor = 1
-	_, _ = m.handleEnter()
+	_, _ = m.handleEnter() // Gina HCI
 
 	if m.Wizard.State.Config.HomeServerImage != model.HomeServerUCoreHCIImage {
 		t.Errorf("unexpected Home Server HCI destination %q", m.Wizard.State.Config.HomeServerImage)

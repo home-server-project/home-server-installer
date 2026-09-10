@@ -333,7 +333,7 @@ func (m *Model) buildBreadcrumb() string {
 
 // renderZenChrome creates the ANSI-art inspired header.
 // Aesthetic: clean framed letterform, cool blue palette, scene-era vibes.
-// Info shown via color hierarchy — version numbers always visible.
+// Info shown via color hierarchy — the installer version stays visible.
 func (m *Model) renderZenChrome() string {
 	var b strings.Builder
 
@@ -369,32 +369,10 @@ func (m *Model) renderZenChrome() string {
 	b.WriteString(sloganStyle.Render("Cloud-native technology, brought home."))
 	b.WriteString("\n\n")
 
-	// Info line: version + system dots (skip on Welcome — cards show it)
-	cfg := &m.Wizard.State.Config
+	// Info line: installer version + system dots (skip on Welcome to preserve layout).
 	if m.Wizard.State.CurrentStep != model.StepWelcome {
-
-		// Channel as label, versions as tight key:value with │ separators
-		var verInfo string
-		if len(m.Wizard.State.Channels) > 0 {
-			for _, ch := range m.Wizard.State.Channels {
-				if ch.Channel == cfg.Channel {
-					verInfo = accentColor.Render(ch.Channel) +
-						dimColor.Render(" │ ") +
-						infoColor.Render("v"+ch.Version) +
-						dimColor.Render(" │ ") +
-						infoColor.Render("linux "+ch.Kernel) +
-						dimColor.Render(" │ ") +
-						infoColor.Render("systemd "+ch.Systemd)
-					break
-				}
-			}
-		}
-		if verInfo == "" {
-			verInfo = accentColor.Render(cfg.Channel)
-		}
-
 		b.WriteString("  ")
-		b.WriteString(verInfo)
+		b.WriteString(infoColor.Render(installerVersion))
 
 		if len(m.Wizard.State.SystemChecks) > 0 {
 			b.WriteString(dimColor.Render("  │  "))
@@ -413,7 +391,7 @@ func (m *Model) renderZenChrome() string {
 			}
 		}
 		b.WriteString("\n")
-	} // end if not Welcome
+	}
 
 	// Step progress: thin line
 	steps := 8
@@ -517,7 +495,6 @@ func (m *Model) viewChannelCards() string {
 	if m.osSubView {
 		return m.viewOSPicker()
 	}
-
 	var b strings.Builder
 	cfg := &m.Wizard.State.Config
 
@@ -621,63 +598,16 @@ type homeServerImageOption struct {
 	desc string
 }
 
+// homeServerImageOptions is synchronized to either the four family choices or
+// the editions in the currently selected family.
 var homeServerImageOptions = []homeServerImageOption{
-	{model.HomeServerUCoreImage, "Home Server Gina LTS", "Home Server Project image based on Universal Blue uCore LTS."},
-	{model.HomeServerUCoreHCIImage, "Home Server Gina HCI LTS", "Home Server Project image based on uCore HCI LTS for virtualization hosts."},
-	{model.UpstreamUCoreMinimalImage, "uCore Minimal LTS", "Upstream Universal Blue lightweight image."},
-	{model.UpstreamUCoreImage, "uCore LTS", "Upstream Universal Blue server image."},
-	{model.UpstreamUCoreHCIImage, "uCore HCI LTS", "Upstream Universal Blue HCI image with virtualization tooling."},
+	{homeServerFamilyGina, "Home Server Gina LTS", "Home Server Project images."},
+	{homeServerFamilyUCore, "Universal Blue uCore LTS", "Standard Universal Blue uCore images."},
+	{homeServerFamilyNvidia, "Universal Blue uCore LTS\n  NVIDIA Open", "Universal Blue uCore images with the NVIDIA Open driver."},
+	{homeServerFamilyNvidiaLTS, "Universal Blue uCore LTS\n  NVIDIA LTS", "Universal Blue uCore images with the NVIDIA LTS driver."},
 }
 
-// viewOSPicker renders the supported signed LTS uCore destination images.
+// viewOSPicker renders the family picker first, then the edition picker.
 func (m *Model) viewOSPicker() string {
-	var b strings.Builder
-
-	selectedBorder := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("51")).
-		Padding(0, 1).
-		Width(60)
-	normalBorder := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Padding(0, 1).
-		Width(60)
-	nameSelected := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("51"))
-	nameNormal := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("255"))
-	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true)
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
-	b.WriteString("  Select installation target:\n\n")
-
-	for i, opt := range homeServerImageOptions {
-		selected := i == m.cursor
-
-		cursor := "  "
-		nameStyle := nameNormal
-		if selected {
-			cursor = cursorStyle.Render("▸ ")
-			nameStyle = nameSelected
-		}
-
-		var card strings.Builder
-		card.WriteString(cursor + nameStyle.Render(opt.name) + "\n")
-		card.WriteString("  " + descStyle.Render(opt.desc))
-
-		if selected {
-			b.WriteString(selectedBorder.Render(card.String()))
-		} else {
-			b.WriteString(normalBorder.Render(card.String()))
-		}
-		b.WriteString("\n")
-	}
-
-	b.WriteString("\n")
-	b.WriteString(dim.Render("  All installer choices use LTS. Switch to stable/NVIDIA later with bootc."))
-	b.WriteString("\n")
-	b.WriteString(dim.Render("  ↑↓/jk select · enter continue"))
-	b.WriteString("\n")
-
-	return b.String()
+	return m.viewHomeServerPicker()
 }

@@ -3,6 +3,9 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/projectbluefin/knuckle/internal/bakery"
+	"github.com/projectbluefin/knuckle/internal/model"
 )
 
 func TestRenderZenChromeHomeServerBranding(t *testing.T) {
@@ -33,30 +36,59 @@ func TestRenderZenChromeHomeServerBranding(t *testing.T) {
 	}
 }
 
-func TestViewOSPickerUsesNeutralInstallationWording(t *testing.T) {
+func TestRenderZenChromeUsesInstallerVersionNotFlatcarDetails(t *testing.T) {
+	oldVersion := installerVersion
+	t.Cleanup(func() { installerVersion = oldVersion })
+	installerVersion = "v1.2.3"
+
+	w := newTestWizard()
+	w.State.CurrentStep = model.StepNetwork
+	w.State.Config.Channel = "stable"
+	w.State.Channels = []bakery.ChannelInfo{{
+		Channel: "stable",
+		Version: "4593.2.5",
+		Kernel:  "6.12.102",
+		Systemd: "257.9",
+	}}
+
+	m := New(w)
+	out := m.renderZenChrome()
+
+	if !strings.Contains(out, "v1.2.3") {
+		t.Fatalf("header should show installer version: %q", out)
+	}
+	for _, unwanted := range []string{"4593.2.5", "linux 6.12.102", "systemd 257.9"} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("header should not show Flatcar detail %q: %q", unwanted, out)
+		}
+	}
+}
+
+func TestViewOSPickerUsesFamilyWording(t *testing.T) {
 	w := newTestWizard()
 	m := New(w)
 	out := m.viewOSPicker()
 
 	for _, want := range []string{
-		"Select installation target:",
+		"Select installation family:",
 		"Home Server Gina LTS",
-		"Home Server Gina HCI LTS",
-		"uCore Minimal LTS",
-		"uCore LTS",
-		"uCore HCI LTS",
+		"Universal Blue uCore LTS",
+		"NVIDIA Open",
+		"NVIDIA LTS",
+		"All installer choices use LTS. Switch to stable/testing later with bootc.",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("target picker should contain %q: %q", want, out)
+			t.Errorf("family picker should contain %q: %q", want, out)
 		}
 	}
 
-	for _, old := range []string{
-		"Select Home Server image:",
-		"Recommended Home Server Project image",
+	for _, premature := range []string{
+		"Home Server Gina HCI LTS",
+		"uCore Minimal LTS",
+		"uCore HCI LTS",
 	} {
-		if strings.Contains(out, old) {
-			t.Errorf("target picker should not contain old text %q: %q", old, out)
+		if strings.Contains(out, premature) {
+			t.Errorf("family picker should not expose edition %q before family selection: %q", premature, out)
 		}
 	}
 }

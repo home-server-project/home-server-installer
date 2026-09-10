@@ -59,19 +59,26 @@ const (
 
 // Home Server destination images. Fedora CoreOS is the live installer
 // environment; the selected signed Gina or upstream uCore image is installed directly.
-// The installer intentionally exposes only LTS targets. Users who need a
-// stable/NVIDIA variant can bootc switch after installation.
+// The installer intentionally exposes LTS targets. Users can switch to
+// stable/testing later with bootc.
 const (
 	HomeServerUCoreImage      = "ghcr.io/home-server-project/home-server-gina:lts"
 	HomeServerUCoreHCIImage   = "ghcr.io/home-server-project/home-server-gina-hci:lts"
 	UpstreamUCoreMinimalImage = "ghcr.io/ublue-os/ucore-minimal:lts"
 	UpstreamUCoreImage        = "ghcr.io/ublue-os/ucore:lts"
 	UpstreamUCoreHCIImage     = "ghcr.io/ublue-os/ucore-hci:lts"
+
+	UpstreamUCoreMinimalNvidiaImage = "ghcr.io/ublue-os/ucore-minimal:lts-nvidia"
+	UpstreamUCoreNvidiaImage        = "ghcr.io/ublue-os/ucore:lts-nvidia"
+	UpstreamUCoreHCINvidiaImage     = "ghcr.io/ublue-os/ucore-hci:lts-nvidia"
+
+	UpstreamUCoreMinimalNvidiaLTSImage = "ghcr.io/ublue-os/ucore-minimal:lts-nvidia-lts"
+	UpstreamUCoreNvidiaLTSImage        = "ghcr.io/ublue-os/ucore:lts-nvidia-lts"
+	UpstreamUCoreHCINvidiaLTSImage     = "ghcr.io/ublue-os/ucore-hci:lts-nvidia-lts"
 )
 
 // Home Server /boot presets. Both remain user-selectable for every image.
-// Standard is the default for the current non-NVIDIA images; Large is the
-// recommended default for future NVIDIA/custom variants.
+// Standard is the default; Large remains available for NVIDIA/custom variants.
 const (
 	HomeServerBootStandardMiB = 1024
 	HomeServerBootLargeMiB    = 2048

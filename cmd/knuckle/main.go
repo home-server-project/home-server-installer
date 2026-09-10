@@ -1,3 +1,5 @@
+// Modified by Home Server Project from Project Bluefin Knuckle.
+
 package main
 
 import (
@@ -170,7 +172,10 @@ func main() {
 		startupFetchFn(ctx, w, logger)
 	}
 
-	// Run the TUI — wire reboot through the runner so dry-run/spy work correctly
+	// Run the TUI — wire reboot through the runner so dry-run/spy work correctly.
+	// The displayed installer version comes from the same build-time version used
+	// by --version; Flatcar channel metadata is not used for Home Server branding.
+	tui.SetInstallerVersion(version)
 	var rebootFn func(context.Context) error
 	if !w.State.Config.DryRun {
 		rebootFn = func(ctx context.Context) error {
