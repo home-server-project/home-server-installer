@@ -6,7 +6,7 @@ import (
 	"github.com/projectbluefin/knuckle/internal/model"
 )
 
-func TestHomeServerWelcomeOutOfRangeCursorFallsBackToUCore(t *testing.T) {
+func TestHomeServerWelcomeOutOfRangeCursorFallsBackToFirstFamily(t *testing.T) {
 	w := newTestWizard()
 	w.State.CurrentStep = model.StepWelcome
 	m := New(w)
@@ -14,11 +14,23 @@ func TestHomeServerWelcomeOutOfRangeCursorFallsBackToUCore(t *testing.T) {
 
 	_, _ = m.handleEnter()
 
+	if m.homeServerFamily != homeServerFamilyGina {
+		t.Fatalf("expected out-of-range cursor to fall back to Gina family, got %q", m.homeServerFamily)
+	}
+	if m.Wizard.State.Config.HomeServerImage != "" {
+		t.Fatalf("family selection should not set an install image, got %q", m.Wizard.State.Config.HomeServerImage)
+	}
+	if m.Wizard.State.CurrentStep != model.StepWelcome {
+		t.Fatalf("family selection should stay on Welcome, got %v", m.Wizard.State.CurrentStep)
+	}
+
+	_, _ = m.handleEnter()
+
 	if m.Wizard.State.Config.HomeServerImage != model.HomeServerUCoreImage {
-		t.Fatalf("expected out-of-range cursor to fall back to standard uCore, got %q", m.Wizard.State.Config.HomeServerImage)
+		t.Fatalf("expected first Gina edition after fallback, got %q", m.Wizard.State.Config.HomeServerImage)
 	}
 	if m.Wizard.State.CurrentStep != model.StepNetwork {
-		t.Fatalf("expected StepNetwork, got %v", m.Wizard.State.CurrentStep)
+		t.Fatalf("expected StepNetwork after selecting Gina LTS, got %v", m.Wizard.State.CurrentStep)
 	}
 }
 
