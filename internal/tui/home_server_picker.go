@@ -28,17 +28,10 @@ type homeServerEditionOption struct {
 	desc string
 }
 
-var homeServerImageFamilies = []homeServerImageFamily{
-	{homeServerFamilyGina, "Home Server Gina LTS", "Home Server Project images."},
-	{homeServerFamilyUCore, "Universal Blue uCore LTS", "Standard Universal Blue uCore images."},
-	{homeServerFamilyNvidia, "Universal Blue uCore LTS\n  NVIDIA Open", "Universal Blue uCore images with the NVIDIA Open driver."},
-	{homeServerFamilyNvidiaLTS, "Universal Blue uCore LTS\n  NVIDIA LTS", "Universal Blue uCore images with the NVIDIA LTS driver."},
-}
-
 var homeServerImagesByFamily = map[string][]homeServerEditionOption{
 	homeServerFamilyGina: {
-		{model.HomeServerUCoreImage, "Gina LTS", "Home Server Project image based on Universal Blue uCore LTS."},
-		{model.HomeServerUCoreHCIImage, "Gina HCI LTS", "Home Server Project image based on uCore HCI LTS for virtualization hosts."},
+		{model.HomeServerUCoreImage, "Home Server Gina LTS", "Home Server Project image based on Universal Blue uCore LTS."},
+		{model.HomeServerUCoreHCIImage, "Home Server Gina HCI LTS", "Home Server Project image based on uCore HCI LTS for virtualization hosts."},
 	},
 	homeServerFamilyUCore: {
 		{model.UpstreamUCoreMinimalImage, "uCore Minimal LTS", "Upstream Universal Blue lightweight image."},
@@ -62,7 +55,7 @@ func homeServerOptionsForFamily(family string) []homeServerEditionOption {
 }
 
 func homeServerFamilyForImage(image string) (string, int, bool) {
-	for _, family := range homeServerImageFamilies {
+	for _, family := range homeServerImageOptions {
 		for i, opt := range homeServerOptionsForFamily(family.id) {
 			if opt.id == image {
 				return family.id, i, true
@@ -73,7 +66,7 @@ func homeServerFamilyForImage(image string) (string, int, bool) {
 }
 
 func homeServerImageDisplayName(image string) (string, bool) {
-	for _, family := range homeServerImageFamilies {
+	for _, family := range homeServerImageOptions {
 		for _, opt := range homeServerOptionsForFamily(family.id) {
 			if opt.id == image {
 				return opt.name, true
@@ -84,7 +77,7 @@ func homeServerImageDisplayName(image string) (string, bool) {
 }
 
 func homeServerFamilyDisplayName(family string) string {
-	for _, opt := range homeServerImageFamilies {
+	for _, opt := range homeServerImageOptions {
 		if opt.id == family {
 			return strings.ReplaceAll(opt.name, "\n  ", " / ")
 		}
@@ -92,51 +85,13 @@ func homeServerFamilyDisplayName(family string) string {
 	return ""
 }
 
-func pickerCurrentlyShowsFamilies() bool {
-	return len(homeServerImageOptions) > 0 && strings.HasPrefix(homeServerImageOptions[0].id, "family:")
-}
-
-// syncHomeServerPickerOptions keeps the legacy Welcome picker slice aligned
-// with the current family sub-step while preserving normal cursor movement.
-func (m *Model) syncHomeServerPickerOptions() {
-	image := m.Wizard.State.Config.HomeServerImage
-
-	if strings.HasPrefix(image, "family:") {
-		transitioning := pickerCurrentlyShowsFamilies()
-		editions := homeServerOptionsForFamily(image)
-		homeServerImageOptions = make([]homeServerImageOption, 0, len(editions))
-		for _, opt := range editions {
-			homeServerImageOptions = append(homeServerImageOptions, homeServerImageOption(opt))
+func homeServerFamilyIndex(family string) int {
+	for i, opt := range homeServerImageOptions {
+		if opt.id == family {
+			return i
 		}
-		if transitioning {
-			m.cursor = 0
-		}
-		return
 	}
-
-	if family, selected, ok := homeServerFamilyForImage(image); ok {
-		transitioning := pickerCurrentlyShowsFamilies()
-		editions := homeServerOptionsForFamily(family)
-		homeServerImageOptions = make([]homeServerImageOption, 0, len(editions))
-		for _, opt := range editions {
-			homeServerImageOptions = append(homeServerImageOptions, homeServerImageOption(opt))
-		}
-		if transitioning {
-			m.cursor = selected
-		}
-		return
-	}
-
-	transitioning := len(homeServerImageOptions) > 0 && !pickerCurrentlyShowsFamilies()
-	homeServerImageOptions = make([]homeServerImageOption, 0, len(homeServerImageFamilies))
-	for _, family := range homeServerImageFamilies {
-		homeServerImageOptions = append(homeServerImageOptions, homeServerImageOption{
-			id: family.id, name: family.name, desc: family.desc,
-		})
-	}
-	if transitioning {
-		m.cursor = 0
-	}
+	return 0
 }
 
 func renderHomeServerCards(title string, cursor int, namesAndDescriptions [][2]string) string {
@@ -189,30 +144,21 @@ func renderHomeServerCards(title string, cursor int, namesAndDescriptions [][2]s
 }
 
 func (m *Model) viewHomeServerPicker() string {
-	m.syncHomeServerPickerOptions()
-	image := m.Wizard.State.Config.HomeServerImage
-
-	if image == "" {
-		items := make([][2]string, 0, len(homeServerImageFamilies))
-		for _, family := range homeServerImageFamilies {
+	if m.homeServerFamily == "" {
+		items := make([][2]string, 0, len(homeServerImageOptions))
+		for _, family := range homeServerImageOptions {
 			items = append(items, [2]string{family.name, family.desc})
 		}
 		return renderHomeServerCards("Select installation family:", m.cursor, items)
 	}
 
-	family := image
-	if !strings.HasPrefix(family, "family:") {
-		if resolved, _, ok := homeServerFamilyForImage(image); ok {
-			family = resolved
-		}
-	}
-	options := homeServerOptionsForFamily(family)
+	options := homeServerOptionsForFamily(m.homeServerFamily)
 	items := make([][2]string, 0, len(options))
 	for _, opt := range options {
 		items = append(items, [2]string{opt.name, opt.desc})
 	}
 	title := "Select edition:"
-	if familyName := homeServerFamilyDisplayName(family); familyName != "" {
+	if familyName := homeServerFamilyDisplayName(m.homeServerFamily); familyName != "" {
 		title = "Select " + familyName + " edition:"
 	}
 	return renderHomeServerCards(title, m.cursor, items)
