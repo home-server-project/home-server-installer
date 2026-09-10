@@ -35,23 +35,22 @@ The Builder uses the latest published Home Server Installer release, then builds
 - **Official release ISO** — easiest generic download; configure password or SSH access during installation.
 - **Gina Builder ISO** — useful when you want your SSH public key already included and a freshly built Fedora CoreOS live environment.
 
-Both paths use the same released Home Server Installer code. Gina Builder changes the installation media by adding the supplied public SSH key and rebuilding against the current Fedora CoreOS stable live image; it does not change the supported Gina/uCore installation targets.
-
 </details>
 
 ## How it fits
 
-- **Home Server Installer releases** publish a ready-to-use generic installation ISO.
-- **Home Server Gina Builder** optionally creates a personalized ISO from the latest published Installer release and embeds your SSH public key.
-- **Home Server Installer** runs from either ISO and handles image selection, disk selection, partitioning, user setup and installation.
-- **Home Server Gina or upstream uCore** is the operating-system image selected and installed by the user.
+- Boot either the official release ISO or a personalized Builder ISO.
+- Home Server Installer collects the installation choices and downloads the selected signed Gina/uCore image.
+- The selected image is installed directly as the first bootable deployment.
 
 <details>
-<summary><strong>Advanced/local use</strong></summary>
+<summary><strong>Advanced/local build</strong></summary>
 
-The Installer can also be built and used directly from this repository for local development, testing and advanced workflows without using the Builder template.
+Advanced users can build Home Server Installer media locally instead of using the published ISO or Gina Builder.
 
-That path is intended for users who want to work with the Installer source itself rather than simply use released installation media.
+A local build can use the current development source or a specific released tag, and the ISO can be created with or without an SSH public key already embedded. This is useful for development, testing, custom build workflows, or users who simply want full control over how their installation media is produced.
+
+The local ISO build uses the Fedora CoreOS live image available for the selected stream at build time. The operating-system image is still selected and downloaded later during installation.
 
 </details>
 
@@ -132,9 +131,7 @@ The selected Gina or upstream uCore image is installed directly as the first boo
 
 ## Tested installation paths
 
-Home Server Installer V1 has been successfully tested in virtual machines and on bare metal. Personalized ISOs created with [Home Server Gina Builder](https://github.com/home-server-project/home-server-gina-builder) were used for some of this validation because they were convenient for SSH-key testing; the Builder is not required to use the Installer.
-
-The official release ISO and personalized Builder ISO use the same released Home Server Installer code and the same ISO build path. The Builder additionally embeds the supplied SSH public key and rebuilds against the current Fedora CoreOS stable live image.
+Home Server Installer V1 has been successfully tested in virtual machines and on bare metal.
 
 Tested boot and installation methods:
 
@@ -185,7 +182,7 @@ The Installer can create the primary user during installation and supports a loc
 
 With the **official generic ISO**, configure access during installation. You can set a password, paste an SSH public key, or enter a GitHub username so the Installer can fetch that account's published SSH public keys.
 
-With a **personalized Gina Builder ISO**, the public SSH key supplied through the Builder repository secret is already embedded in the installation media and handed to the Installer automatically.
+With a **personalized Gina Builder ISO**, the supplied public SSH key is already available to the Installer.
 
 Password-backed users keep normal password-required `sudo` behavior. The SSH-key-only/passwordless administration path is available but remains part of ongoing end-to-end validation.
 
@@ -206,18 +203,7 @@ Only supported repositories are accepted by the Home Server installation path. U
 
 ## Current scope
 
-The current V1 path includes:
-
-- target-disk selection
-- 1 GiB / 2 GiB `/boot` layout selection
-- local password setup
-- SSH key configuration
-- signed Gina and upstream uCore LTS image selection, including NVIDIA Open and NVIDIA LTS families
-- direct bootc installation to the selected disk
-
-V1 has been validated in virtual machines and on bare metal using both direct-write USB media and Ventoy.
-
-**A VM walk-through is recommended before the first bare-metal installation.**
+V1 currently focuses on the signed Gina/uCore LTS installation path for x86_64 / amd64 UEFI systems, with direct bootc installation and the storage, user and SSH configuration described above.
 
 ## Upstream and references
 
