@@ -333,7 +333,7 @@ func (m *Model) buildBreadcrumb() string {
 
 // renderZenChrome creates the ANSI-art inspired header.
 // Aesthetic: clean framed letterform, cool blue palette, scene-era vibes.
-// Info shown via color hierarchy — version numbers always visible.
+// Info shown via color hierarchy — the installer version stays visible.
 func (m *Model) renderZenChrome() string {
 	var b strings.Builder
 
@@ -369,32 +369,10 @@ func (m *Model) renderZenChrome() string {
 	b.WriteString(sloganStyle.Render("Cloud-native technology, brought home."))
 	b.WriteString("\n\n")
 
-	// Info line: version + system dots (skip on Welcome — cards show it)
-	cfg := &m.Wizard.State.Config
+	// Info line: installer version + system dots (skip on Welcome to preserve layout).
 	if m.Wizard.State.CurrentStep != model.StepWelcome {
-
-		// Channel as label, versions as tight key:value with │ separators
-		var verInfo string
-		if len(m.Wizard.State.Channels) > 0 {
-			for _, ch := range m.Wizard.State.Channels {
-				if ch.Channel == cfg.Channel {
-					verInfo = accentColor.Render(ch.Channel) +
-						dimColor.Render(" │ ") +
-						infoColor.Render("v"+ch.Version) +
-						dimColor.Render(" │ ") +
-						infoColor.Render("linux "+ch.Kernel) +
-						dimColor.Render(" │ ") +
-						infoColor.Render("systemd "+ch.Systemd)
-					break
-				}
-			}
-		}
-		if verInfo == "" {
-			verInfo = accentColor.Render(cfg.Channel)
-		}
-
 		b.WriteString("  ")
-		b.WriteString(verInfo)
+		b.WriteString(infoColor.Render(installerVersion))
 
 		if len(m.Wizard.State.SystemChecks) > 0 {
 			b.WriteString(dimColor.Render("  │  "))
@@ -413,7 +391,7 @@ func (m *Model) renderZenChrome() string {
 			}
 		}
 		b.WriteString("\n")
-	} // end if not Welcome
+	}
 
 	// Step progress: thin line
 	steps := 8
@@ -517,7 +495,6 @@ func (m *Model) viewChannelCards() string {
 	if m.osSubView {
 		return m.viewOSPicker()
 	}
-
 	var b strings.Builder
 	cfg := &m.Wizard.State.Config
 
