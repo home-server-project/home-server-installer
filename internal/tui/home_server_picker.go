@@ -93,29 +93,26 @@ func homeServerFamilyDisplayName(family string) string {
 }
 
 // syncHomeServerPickerOptions keeps the legacy Welcome picker slice aligned
-// with the current family sub-step. tui.go can therefore keep its existing
-// cursor and Enter handling while the picker becomes hierarchical.
+// with the current family sub-step. It intentionally does not change m.cursor;
+// navigation state is owned by the existing TUI key handling.
 func (m *Model) syncHomeServerPickerOptions() {
 	image := m.Wizard.State.Config.HomeServerImage
 
 	if strings.HasPrefix(image, "family:") {
-		family := image
-		editions := homeServerOptionsForFamily(family)
+		editions := homeServerOptionsForFamily(image)
 		homeServerImageOptions = make([]homeServerImageOption, 0, len(editions))
 		for _, opt := range editions {
 			homeServerImageOptions = append(homeServerImageOptions, homeServerImageOption(opt))
 		}
-		m.cursor = 0
 		return
 	}
 
-	if family, selected, ok := homeServerFamilyForImage(image); ok {
+	if family, _, ok := homeServerFamilyForImage(image); ok {
 		editions := homeServerOptionsForFamily(family)
 		homeServerImageOptions = make([]homeServerImageOption, 0, len(editions))
 		for _, opt := range editions {
 			homeServerImageOptions = append(homeServerImageOptions, homeServerImageOption(opt))
 		}
-		m.cursor = selected
 		return
 	}
 
@@ -125,7 +122,6 @@ func (m *Model) syncHomeServerPickerOptions() {
 			id: family.id, name: family.name, desc: family.desc,
 		})
 	}
-	m.cursor = 0
 }
 
 func renderHomeServerCards(title string, cursor int, namesAndDescriptions [][2]string) string {
