@@ -598,63 +598,16 @@ type homeServerImageOption struct {
 	desc string
 }
 
+// homeServerImageOptions is synchronized to either the four family choices or
+// the editions in the currently selected family.
 var homeServerImageOptions = []homeServerImageOption{
-	{model.HomeServerUCoreImage, "Home Server Gina LTS", "Home Server Project image based on Universal Blue uCore LTS."},
-	{model.HomeServerUCoreHCIImage, "Home Server Gina HCI LTS", "Home Server Project image based on uCore HCI LTS for virtualization hosts."},
-	{model.UpstreamUCoreMinimalImage, "uCore Minimal LTS", "Upstream Universal Blue lightweight image."},
-	{model.UpstreamUCoreImage, "uCore LTS", "Upstream Universal Blue server image."},
-	{model.UpstreamUCoreHCIImage, "uCore HCI LTS", "Upstream Universal Blue HCI image with virtualization tooling."},
+	{homeServerFamilyGina, "Home Server Gina LTS", "Home Server Project images."},
+	{homeServerFamilyUCore, "Universal Blue uCore LTS", "Standard Universal Blue uCore images."},
+	{homeServerFamilyNvidia, "Universal Blue uCore LTS\n  NVIDIA Open", "Universal Blue uCore images with the NVIDIA Open driver."},
+	{homeServerFamilyNvidiaLTS, "Universal Blue uCore LTS\n  NVIDIA LTS", "Universal Blue uCore images with the NVIDIA LTS driver."},
 }
 
-// viewOSPicker renders the supported signed LTS uCore destination images.
+// viewOSPicker renders the family picker first, then the edition picker.
 func (m *Model) viewOSPicker() string {
-	var b strings.Builder
-
-	selectedBorder := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("51")).
-		Padding(0, 1).
-		Width(60)
-	normalBorder := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Padding(0, 1).
-		Width(60)
-	nameSelected := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("51"))
-	nameNormal := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("255"))
-	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true)
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
-	b.WriteString("  Select installation target:\n\n")
-
-	for i, opt := range homeServerImageOptions {
-		selected := i == m.cursor
-
-		cursor := "  "
-		nameStyle := nameNormal
-		if selected {
-			cursor = cursorStyle.Render("▸ ")
-			nameStyle = nameSelected
-		}
-
-		var card strings.Builder
-		card.WriteString(cursor + nameStyle.Render(opt.name) + "\n")
-		card.WriteString("  " + descStyle.Render(opt.desc))
-
-		if selected {
-			b.WriteString(selectedBorder.Render(card.String()))
-		} else {
-			b.WriteString(normalBorder.Render(card.String()))
-		}
-		b.WriteString("\n")
-	}
-
-	b.WriteString("\n")
-	b.WriteString(dim.Render("  All installer choices use LTS. Switch to stable/NVIDIA later with bootc."))
-	b.WriteString("\n")
-	b.WriteString(dim.Render("  ↑↓/jk select · enter continue"))
-	b.WriteString("\n")
-
-	return b.String()
+	return m.viewHomeServerPicker()
 }
