@@ -1,6 +1,6 @@
 # Testing Home Server Installer V1
 
-V1 is currently validated through end-to-end VM installation. VM testing is recommended first before moving to dedicated bare-metal test hardware.
+V1 is validated through end-to-end VM installation and dedicated bare-metal testing. VM testing is still recommended first before moving to physical hardware.
 
 ## Go tests
 
@@ -50,16 +50,24 @@ Check at minimum:
 
 - installer boots in UEFI mode;
 - TUI appears normally;
-- all five signed LTS image choices are available;
+- all 11 signed LTS installation choices are available through the four image families;
+- every picker choice maps to the expected image tag;
 - intended target disk is selected;
 - 1 GiB or 2 GiB `/boot` layout matches the test plan;
 - local password and/or SSH public key can be configured;
 - signed image pull succeeds;
 - direct installation completes;
-- reboot enters the selected uCore image directly;
+- reboot enters the selected Gina/uCore image directly;
 - SSH works when configured;
 - `sudo bootc status` shows the expected image;
 - `sudo systemctl --failed --no-pager` has no unexpected failures.
+
+The four image families are:
+
+- Home Server Gina LTS;
+- Universal Blue uCore LTS;
+- Universal Blue uCore LTS / NVIDIA Open;
+- Universal Blue uCore LTS / NVIDIA LTS.
 
 ## Non-target disk test
 
@@ -73,10 +81,13 @@ This test has already passed in clean VM validation and should remain part of re
 
 Current clean VM testing has validated:
 
-- a Home Server Project uCore HCI target;
-- upstream `ghcr.io/ublue-os/ucore-minimal:lts` as the representative Universal Blue signing/install path.
+- a Home Server Gina HCI LTS target;
+- upstream `ghcr.io/ublue-os/ucore-minimal:lts` as a representative standard Universal Blue signing/install path;
+- upstream `ghcr.io/ublue-os/ucore-hci:lts-nvidia-lts` as an NVIDIA LTS signing/install path.
 
-The installer exposes five signed LTS targets in total. Changes to image selection, signing trust, or installation logic should be tested against the affected trust path.
+The 2026-09-10 acceptance test exercised the complete two-level picker and verified that all 11 visible choices mapped to the intended image tags. A full install of **uCore HCI LTS NVIDIA LTS** completed successfully from signed pull through installation.
+
+The installer exposes 11 signed LTS targets in total. Changes to image selection, signing trust, or installation logic should be tested against the affected trust path.
 
 ## SSH validation
 
@@ -107,8 +118,13 @@ Then reconnect and verify the new fingerprint.
 
 ## Dedicated bare-metal testing
 
-After the VM path is green, bare-metal testing can be performed on a dedicated test drive or test hardware where the selected installation disk can be safely erased.
+Bare-metal testing has completed successfully on dedicated test hardware using both direct-write USB media and Ventoy.
 
-Keep backups of anything important and verify the selected disk carefully on the review screen before starting installation.
+Validated examples include:
+
+- Home Server Gina HCI LTS with a 1 GiB `/boot` layout;
+- upstream Universal Blue uCore LTS with a 2 GiB `/boot` layout.
+
+Additional hardware coverage remains useful, especially for NVIDIA systems. Use a dedicated test drive or test hardware where the selected installation disk can be erased.
 
 Secure Boot must be disabled during the current V1 installation path. After installation, follow the current uCore documentation if Secure Boot is to be configured or enabled.

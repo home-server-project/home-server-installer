@@ -35,15 +35,37 @@ That path is intended for users who want to work with the Installer source itsel
 
 ## Installer choices
 
-The Installer exposes five signed LTS targets:
+Home Server Installer currently supports **11 signed LTS installation targets** across four families.
+
+<details>
+<summary><strong>Show all 11 installation targets</strong></summary>
+
+### Home Server Gina LTS
 
 - **Home Server Gina LTS** — `ghcr.io/home-server-project/home-server-gina:lts`
 - **Home Server Gina HCI LTS** — `ghcr.io/home-server-project/home-server-gina-hci:lts`
+
+### Universal Blue uCore LTS
+
 - **uCore Minimal LTS** — `ghcr.io/ublue-os/ucore-minimal:lts`
 - **uCore LTS** — `ghcr.io/ublue-os/ucore:lts`
 - **uCore HCI LTS** — `ghcr.io/ublue-os/ucore-hci:lts`
 
-The menu intentionally stays limited to LTS targets. Other images can remain post-install `bootc switch` destinations instead of turning the Installer into a large image matrix.
+### Universal Blue uCore LTS / NVIDIA Open
+
+- **uCore Minimal LTS NVIDIA Open** — `ghcr.io/ublue-os/ucore-minimal:lts-nvidia`
+- **uCore LTS NVIDIA Open** — `ghcr.io/ublue-os/ucore:lts-nvidia`
+- **uCore HCI LTS NVIDIA Open** — `ghcr.io/ublue-os/ucore-hci:lts-nvidia`
+
+### Universal Blue uCore LTS / NVIDIA LTS
+
+- **uCore Minimal LTS NVIDIA LTS** — `ghcr.io/ublue-os/ucore-minimal:lts-nvidia-lts`
+- **uCore LTS NVIDIA LTS** — `ghcr.io/ublue-os/ucore:lts-nvidia-lts`
+- **uCore HCI LTS NVIDIA LTS** — `ghcr.io/ublue-os/ucore-hci:lts-nvidia-lts`
+
+</details>
+
+The TUI first selects one of the four image families, then the edition inside that family. All installer choices use LTS images. After installation, users can switch to `stable` or `testing` with `bootc`.
 
 ## Installation flow
 
@@ -107,6 +129,8 @@ Successful bare-metal installations included:
 
 Both installations completed successfully, rebooted into the selected image, and produced the expected disk layout.
 
+The 2026-09-10 VM acceptance test also verified the new four-family image picker. All 11 installation choices mapped to the expected image tags, and a full **uCore HCI LTS NVIDIA LTS** installation completed successfully using `ghcr.io/ublue-os/ucore-hci:lts-nvidia-lts`.
+
 Startup and installation time can vary depending on the USB drive, USB interface, network connection, and boot method.
 
 ## Storage and disk safety
@@ -145,7 +169,7 @@ For the normal personalized-ISO workflow, use [Home Server Gina Builder](https:/
 
 ## Image verification
 
-Home Server Project images are verified with the Home Server Project Cosign public key. Upstream `ublue-os/ucore*` images are verified with Universal Blue's uCore Cosign public key.
+Home Server Project images are verified with the Home Server Project Cosign public key. Upstream `ublue-os/ucore*` images, including NVIDIA Open and NVIDIA LTS variants, are verified with Universal Blue's uCore Cosign public key.
 
 Only supported repositories are accepted by the Home Server installation path. Unknown image repositories are rejected. Temporary signature-discovery configuration used during installation is cleaned up and does not persist into the installed system.
 
@@ -157,7 +181,7 @@ The current V1 path includes:
 - 1 GiB / 2 GiB `/boot` layout selection
 - local password setup
 - SSH key configuration
-- signed Gina and upstream uCore LTS image selection
+- signed Gina and upstream uCore LTS image selection, including NVIDIA Open and NVIDIA LTS families
 - direct bootc installation to the selected disk
 
 V1 has been validated in virtual machines and on bare metal using both direct-write USB media and Ventoy.
