@@ -16,12 +16,6 @@ const (
 	homeServerFamilyNvidiaLTS = "family:ucore-nvidia-lts"
 )
 
-type homeServerImageFamily struct {
-	id   string
-	name string
-	desc string
-}
-
 type homeServerEditionOption struct {
 	id   string
 	name string
