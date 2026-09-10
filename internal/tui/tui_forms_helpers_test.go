@@ -31,16 +31,17 @@ func TestRenderZenChrome_NonWelcomeWithChannels(t *testing.T) {
 	}
 	m := New(w)
 	out := m.renderZenChrome()
-	if !strings.Contains(out, "4593.2.0") {
-		t.Errorf("renderZenChrome should show version from Channels: %q", out)
+	if !strings.Contains(out, installerVersion) {
+		t.Errorf("renderZenChrome should show installer version %q: %q", installerVersion, out)
 	}
-	if !strings.Contains(out, "6.12.81") {
-		t.Errorf("renderZenChrome should show kernel: %q", out)
+	for _, unwanted := range []string{"4593.2.0", "6.12.81", "255.13"} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("renderZenChrome should not show channel detail %q: %q", unwanted, out)
+		}
 	}
 }
 
 func TestRenderZenChrome_NonWelcomeNoChannelMatch(t *testing.T) {
-	// When no channel info matches cfg.Channel, falls back to channel name only.
 	w := newTestWizard()
 	w.State.CurrentStep = model.StepStorage
 	w.State.Config.Channel = "beta"
@@ -49,8 +50,13 @@ func TestRenderZenChrome_NonWelcomeNoChannelMatch(t *testing.T) {
 	}
 	m := New(w)
 	out := m.renderZenChrome()
-	if !strings.Contains(out, "beta") {
-		t.Errorf("renderZenChrome fallback should show channel name: %q", out)
+	if !strings.Contains(out, installerVersion) {
+		t.Errorf("renderZenChrome should show installer version %q: %q", installerVersion, out)
+	}
+	for _, unwanted := range []string{"beta", "4593.2.0"} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("renderZenChrome should not fall back to channel detail %q: %q", unwanted, out)
+		}
 	}
 }
 
