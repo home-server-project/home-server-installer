@@ -92,35 +92,50 @@ func homeServerFamilyDisplayName(family string) string {
 	return ""
 }
 
+func pickerCurrentlyShowsFamilies() bool {
+	return len(homeServerImageOptions) > 0 && strings.HasPrefix(homeServerImageOptions[0].id, "family:")
+}
+
 // syncHomeServerPickerOptions keeps the legacy Welcome picker slice aligned
-// with the current family sub-step. It intentionally does not change m.cursor;
-// navigation state is owned by the existing TUI key handling.
+// with the current family sub-step while preserving normal cursor movement.
 func (m *Model) syncHomeServerPickerOptions() {
 	image := m.Wizard.State.Config.HomeServerImage
 
 	if strings.HasPrefix(image, "family:") {
+		transitioning := pickerCurrentlyShowsFamilies()
 		editions := homeServerOptionsForFamily(image)
 		homeServerImageOptions = make([]homeServerImageOption, 0, len(editions))
 		for _, opt := range editions {
 			homeServerImageOptions = append(homeServerImageOptions, homeServerImageOption(opt))
 		}
+		if transitioning {
+			m.cursor = 0
+		}
 		return
 	}
 
-	if family, _, ok := homeServerFamilyForImage(image); ok {
+	if family, selected, ok := homeServerFamilyForImage(image); ok {
+		transitioning := pickerCurrentlyShowsFamilies()
 		editions := homeServerOptionsForFamily(family)
 		homeServerImageOptions = make([]homeServerImageOption, 0, len(editions))
 		for _, opt := range editions {
 			homeServerImageOptions = append(homeServerImageOptions, homeServerImageOption(opt))
 		}
+		if transitioning {
+			m.cursor = selected
+		}
 		return
 	}
 
+	transitioning := len(homeServerImageOptions) > 0 && !pickerCurrentlyShowsFamilies()
 	homeServerImageOptions = make([]homeServerImageOption, 0, len(homeServerImageFamilies))
 	for _, family := range homeServerImageFamilies {
 		homeServerImageOptions = append(homeServerImageOptions, homeServerImageOption{
 			id: family.id, name: family.name, desc: family.desc,
 		})
+	}
+	if transitioning {
+		m.cursor = 0
 	}
 }
 
