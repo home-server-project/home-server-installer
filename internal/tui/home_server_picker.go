@@ -94,6 +94,10 @@ func homeServerFamilyIndex(family string) int {
 	return 0
 }
 
+// homeServerImageFamilies is a read-only compatibility view of the four family
+// choices. The picker never mutates either slice.
+var homeServerImageFamilies = homeServerImageOptions
+
 func renderHomeServerCards(title string, cursor int, namesAndDescriptions [][2]string) string {
 	var b strings.Builder
 
