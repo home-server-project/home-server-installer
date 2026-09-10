@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"runtime"
-	"strings"
 
 	"github.com/projectbluefin/knuckle/internal/bakery"
 	"github.com/projectbluefin/knuckle/internal/ignition"
@@ -116,12 +115,6 @@ func (w *Wizard) Next() error {
 		return err
 	}
 
-	// Home Server image families are a Welcome sub-step, not an install target.
-	// Stay on Welcome until the user chooses the concrete Gina/uCore edition.
-	if w.State.CurrentStep == model.StepWelcome && strings.HasPrefix(w.State.Config.HomeServerImage, "family:") {
-		return nil
-	}
-
 	if w.State.CurrentStep < model.StepDone {
 		w.State.CurrentStep++
 		// BluefinDDI and the Home Server profile skip generic Sysext, Nvidia,
@@ -149,12 +142,6 @@ func (w *Wizard) Next() error {
 
 // Previous goes back to the previous step
 func (w *Wizard) Previous() {
-	// On the Welcome edition sub-step, Esc returns to the family list.
-	if w.State.CurrentStep == model.StepWelcome && w.State.Config.HomeServerImage != "" {
-		w.State.Config.HomeServerImage = ""
-		return
-	}
-
 	if w.State.CurrentStep > model.StepWelcome {
 		w.State.CurrentStep--
 		// BluefinDDI/Home Server: skip back over Sysext/Nvidia/Tailscale/Update.
