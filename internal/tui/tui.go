@@ -74,6 +74,11 @@ type Model struct {
 	// or the channel/stream card picker is shown (false).
 	osSubView bool
 
+	// homeServerFamily is TUI-only navigation state for the two-level
+	// Home Server picker. Config.HomeServerImage remains empty until a real
+	// Gina/uCore edition is selected.
+	homeServerFamily string
+
 	// Sysext list (bubbles/list)
 	sysextList      list.Model
 	sysextListReady bool
@@ -400,6 +405,14 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.cursor = m.sysextListCursorIdx()
 			return m, cmd
 		}
+		if m.Wizard.State.CurrentStep == model.StepWelcome && m.osSubView && m.homeServerFamily != "" {
+			family := m.homeServerFamily
+			m.homeServerFamily = ""
+			m.Wizard.State.Config.HomeServerImage = ""
+			m.cursor = homeServerFamilyIndex(family)
+			m.err = nil
+			return m, nil
+		}
 		m.Wizard.Previous()
 		m.err = nil
 		m.initStepFields()
@@ -451,7 +464,10 @@ func (m *Model) maxCursor() int {
 	switch m.Wizard.State.CurrentStep {
 	case model.StepWelcome:
 		if m.osSubView {
-			return len(homeServerImageOptions)
+			if m.homeServerFamily == "" {
+				return len(homeServerImageOptions)
+			}
+			return len(homeServerOptionsForFamily(m.homeServerFamily))
 		}
 		return m.channelCardCount()
 	case model.StepStorage:
@@ -477,13 +493,29 @@ func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
 	switch step {
 	case model.StepWelcome:
 		if m.osSubView {
-			if m.cursor < 0 || m.cursor >= len(homeServerImageOptions) {
+			cfg := &m.Wizard.State.Config
+			if m.homeServerFamily == "" {
+				if m.cursor < 0 || m.cursor >= len(homeServerImageOptions) {
+					m.cursor = 0
+				}
+				m.homeServerFamily = homeServerImageOptions[m.cursor].id
+				cfg.HomeServerImage = ""
+				m.err = nil
+				m.cursor = 0
+				return m, nil
+			}
+
+			editions := homeServerOptionsForFamily(m.homeServerFamily)
+			if m.cursor < 0 || m.cursor >= len(editions) {
 				m.cursor = 0
 			}
-			cfg := &m.Wizard.State.Config
+			if len(editions) == 0 {
+				m.err = fmt.Errorf("no install editions are available for the selected family")
+				return m, nil
+			}
 			cfg.OS = model.OSFCOS
 			cfg.Channel = "stable"
-			cfg.HomeServerImage = homeServerImageOptions[m.cursor].id
+			cfg.HomeServerImage = editions[m.cursor].id
 			// FCOS is a short-lived bootstrap in the Home Server path. Generic
 			// sysext/swap/Tailscale/update-policy choices are deliberately skipped.
 			cfg.Sysexts = nil
@@ -761,11 +793,10 @@ func (m *Model) initStepFields() {
 	case model.StepWelcome:
 		m.osSubView = true
 		m.cursor = 0
-		for i, opt := range homeServerImageOptions {
-			if m.Wizard.State.Config.HomeServerImage == opt.id {
-				m.cursor = i
-				break
-			}
+		m.homeServerFamily = ""
+		if family, selected, ok := homeServerFamilyForImage(m.Wizard.State.Config.HomeServerImage); ok {
+			m.homeServerFamily = family
+			m.cursor = selected
 		}
 		m.fields = nil
 	case model.StepNvidia:
@@ -1263,10 +1294,8 @@ func (m *Model) viewUpdate() string {
 }
 
 func installTargetDisplayName(cfg *model.InstallConfig) string {
-	for _, opt := range homeServerImageOptions {
-		if cfg.HomeServerImage == opt.id {
-			return opt.name
-		}
+	if name, ok := homeServerImageDisplayName(cfg.HomeServerImage); ok {
+		return name
 	}
 
 	switch cfg.OS {
