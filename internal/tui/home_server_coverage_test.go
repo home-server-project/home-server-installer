@@ -19,6 +19,12 @@ func TestHomeServerInstallAndDoneNames(t *testing.T) {
 		{model.UpstreamUCoreMinimalImage, "uCore Minimal LTS"},
 		{model.UpstreamUCoreImage, "uCore LTS"},
 		{model.UpstreamUCoreHCIImage, "uCore HCI LTS"},
+		{model.UpstreamUCoreMinimalNvidiaImage, "uCore Minimal LTS NVIDIA Open"},
+		{model.UpstreamUCoreNvidiaImage, "uCore LTS NVIDIA Open"},
+		{model.UpstreamUCoreHCINvidiaImage, "uCore HCI LTS NVIDIA Open"},
+		{model.UpstreamUCoreMinimalNvidiaLTSImage, "uCore Minimal LTS NVIDIA LTS"},
+		{model.UpstreamUCoreNvidiaLTSImage, "uCore LTS NVIDIA LTS"},
+		{model.UpstreamUCoreHCINvidiaLTSImage, "uCore HCI LTS NVIDIA LTS"},
 	}
 
 	for _, tc := range tests {
@@ -39,39 +45,46 @@ func TestHomeServerInstallAndDoneNames(t *testing.T) {
 	}
 }
 
-func TestHomeServerWelcomeRestoresEachImageSelection(t *testing.T) {
-	for wantCursor, opt := range homeServerImageOptions {
-		w := newTestWizard()
-		w.State.CurrentStep = model.StepWelcome
-		w.State.Config.HomeServerImage = opt.id
-		m := New(w)
-		if m.cursor != wantCursor {
-			t.Fatalf("image %q: expected cursor %d, got %d", opt.id, wantCursor, m.cursor)
-		}
+func TestHomeServerWelcomeRestoresImageSelection(t *testing.T) {
+	w := newTestWizard()
+	w.State.CurrentStep = model.StepWelcome
+	w.State.Config.HomeServerImage = model.UpstreamUCoreHCIImage
+
+	m := New(w)
+	if m.homeServerFamily != homeServerFamilyUCore {
+		t.Fatalf("expected uCore family restored, got %q", m.homeServerFamily)
+	}
+	if m.cursor != 2 {
+		t.Fatalf("expected uCore HCI edition cursor 2, got %d", m.cursor)
+	}
+	if out := m.viewOSPicker(); !strings.Contains(out, "Select Universal Blue uCore LTS edition:") {
+		t.Fatalf("restored picker should show uCore editions: %s", out)
 	}
 }
 
-func TestHomeServerWelcomeExposesFiveLTSChoices(t *testing.T) {
+func TestHomeServerWelcomeExposesFourFamilies(t *testing.T) {
 	w := newTestWizard()
 	w.State.CurrentStep = model.StepWelcome
 	m := New(w)
 
-	if got := m.maxCursor(); got != 5 {
-		t.Fatalf("expected five Home Server image choices, got %d", got)
+	if got := m.maxCursor(); got != 4 {
+		t.Fatalf("expected four Home Server families, got %d", got)
 	}
 	out := m.viewOSPicker()
 	for _, name := range []string{
 		"Home Server Gina LTS",
-		"Home Server Gina HCI LTS",
-		"uCore Minimal LTS",
-		"uCore LTS",
-		"uCore HCI LTS",
+		"Universal Blue uCore LTS",
+		"NVIDIA Open",
+		"NVIDIA LTS",
 	} {
 		if !strings.Contains(out, name) {
-			t.Fatalf("picker missing %q: %s", name, out)
+			t.Fatalf("family picker missing %q: %s", name, out)
 		}
 	}
-	if !strings.Contains(out, "Switch to stable/NVIDIA later with bootc") {
+	if strings.Contains(out, "uCore Minimal LTS") || strings.Contains(out, "Home Server Gina HCI LTS") {
+		t.Fatalf("family picker should not expose editions yet: %s", out)
+	}
+	if !strings.Contains(out, "Switch to stable/testing later with bootc") {
 		t.Fatalf("picker missing post-install rebase guidance: %s", out)
 	}
 }
@@ -81,26 +94,61 @@ func TestHomeServerWelcomeKeyboardSelectsUpstreamHCI(t *testing.T) {
 	w.State.CurrentStep = model.StepWelcome
 	m := New(w)
 
-	if m.cursor != 0 {
-		t.Fatalf("expected initial Home Server cursor 0, got %d", m.cursor)
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updated.(*Model)
+	if m.cursor != 1 {
+		t.Fatalf("expected uCore family cursor 1, got %d", m.cursor)
 	}
 
-	for range 4 {
-		updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(*Model)
+	if m.homeServerFamily != homeServerFamilyUCore {
+		t.Fatalf("expected uCore family selection, got %q", m.homeServerFamily)
+	}
+	if m.Wizard.State.Config.HomeServerImage != "" {
+		t.Fatalf("family selection must not set an install image, got %q", m.Wizard.State.Config.HomeServerImage)
+	}
+
+	for range 2 {
+		updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		m = updated.(*Model)
 	}
-	if m.cursor != 4 {
-		t.Fatalf("expected down keys to highlight upstream HCI cursor 4, got %d", m.cursor)
+	if m.cursor != 2 {
+		t.Fatalf("expected uCore HCI edition cursor 2, got %d", m.cursor)
 	}
 
-	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(*Model)
-
 	if m.Wizard.State.Config.HomeServerImage != model.UpstreamUCoreHCIImage {
-		t.Fatalf("expected keyboard selection to preserve upstream HCI image, got %q", m.Wizard.State.Config.HomeServerImage)
+		t.Fatalf("expected upstream HCI image, got %q", m.Wizard.State.Config.HomeServerImage)
 	}
 	if m.Wizard.State.CurrentStep != model.StepNetwork {
 		t.Fatalf("expected upstream HCI selection to advance to Network, got %v", m.Wizard.State.CurrentStep)
+	}
+}
+
+func TestHomeServerWelcomeEscReturnsEditionToFamily(t *testing.T) {
+	w := newTestWizard()
+	w.State.CurrentStep = model.StepWelcome
+	m := New(w)
+	m.cursor = 2
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(*Model)
+	if m.homeServerFamily != homeServerFamilyNvidia {
+		t.Fatalf("expected NVIDIA Open family, got %q", m.homeServerFamily)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	m = updated.(*Model)
+	if m.homeServerFamily != "" {
+		t.Fatalf("Esc should return to family picker, got %q", m.homeServerFamily)
+	}
+	if m.cursor != 2 {
+		t.Fatalf("Esc should restore selected family cursor 2, got %d", m.cursor)
+	}
+	if m.Wizard.State.Config.HomeServerImage != "" {
+		t.Fatalf("Esc from edition picker should leave image empty, got %q", m.Wizard.State.Config.HomeServerImage)
 	}
 }
 
