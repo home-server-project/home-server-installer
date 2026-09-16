@@ -145,7 +145,7 @@ Tested boot and installation methods:
 - ASUS VivoBook X412DA-AB31
 - AMD Ryzen 3 3200U
 - AMD Radeon Vega 3
-- 12 GB DDR4
+- 8 GB DDR4
 - 128 GB SSD
 - USB Ethernet adapter using DHCP
 
