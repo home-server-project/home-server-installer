@@ -132,6 +132,8 @@ The Installer can create the primary user during installation and supports a loc
 
 Password-backed users keep normal password-required `sudo` behavior. The SSH-key-only/passwordless administration path is available but remains part of ongoing end-to-end validation.
 
+For Home Server Project images that include Tailscale, the Installer also configures the selected primary administrator as the Tailscale operator on first boot. The username is taken from the actual installation choice; no product-specific username is hardcoded. Selected upstream uCore images are left unchanged.
+
 A public SSH key can be supplied when building a personalized ISO. Only the public key belongs in the ISO; private SSH keys must remain on the user's own computer.
 
 > [!NOTE]

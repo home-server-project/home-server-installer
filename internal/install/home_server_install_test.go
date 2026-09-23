@@ -153,6 +153,10 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 				"rpm-ostreed-automatic.timer is not enabled in finalized target",
 				"SSH-only admin sudoers file did not survive bootc finalize",
 				"obsolete first-boot provisioning service remains in target",
+				"home-server-tailscale-operator.service",
+				"ExecStart=/usr/bin/tailscale set --operator=${USERNAME}",
+				"systemctl --root=\"$DEPLOY\" enable home-server-tailscale-operator.service",
+				"Tailscale operator unit is not enabled",
 			} {
 				if !strings.Contains(call.Input, required) {
 					t.Fatalf("direct install script missing %q", required)
@@ -183,6 +187,37 @@ func TestHomeServerInstallerUsesDirectBootcScriptAndSelectedLayout(t *testing.T)
 				}
 			}
 		})
+	}
+}
+
+func TestHomeServerInstallerScopesTailscaleOperatorToHomeServerImages(t *testing.T) {
+	spy := runner.NewSpyRunner()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := testHomeServerConfig(model.HomeServerBootStandardMiB)
+	cfg.Users[0].Username = "adminuser"
+
+	if err := NewHomeServerInstaller(spy, logger).Install(context.Background(), cfg, func(string) {}); err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if len(spy.Calls) != 1 {
+		t.Fatalf("expected one shell invocation, got %d", len(spy.Calls))
+	}
+
+	script := spy.Calls[0].Input
+	for _, required := range []string{
+		`case "$IMAGE" in`,
+		`ghcr.io/home-server-project/*)`,
+		`ExecStart=/usr/bin/tailscale set --operator=${USERNAME}`,
+		`ConditionPathExists=/usr/bin/tailscale`,
+		`After=tailscaled.service`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Fatalf("shared Tailscale operator integration missing %q", required)
+		}
+	}
+
+	if strings.Contains(script, "--operator=voxel") || strings.Contains(script, "--operator=bbox") {
+		t.Fatal("Tailscale operator integration must not hardcode a product username")
 	}
 }
 
