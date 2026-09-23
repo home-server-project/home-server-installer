@@ -306,6 +306,35 @@ else
     rm -f "$SUDOERS_FILE"
 fi
 
+# Home Server Project images configure the installer-selected normal admin user
+# as the Tailscale operator on first boot. This follows the Bluefin/Bazzite
+# model without hardcoding product-specific usernames. Upstream uCore targets
+# are intentionally left untouched.
+TAILSCALE_OPERATOR_UNIT="${DEPLOY}/etc/systemd/system/home-server-tailscale-operator.service"
+case "$IMAGE" in
+    ghcr.io/home-server-project/*)
+        if [[ -x "${DEPLOY}/usr/bin/tailscale" ]]; then
+            mkdir -p "${DEPLOY}/etc/systemd/system"
+            cat > "$TAILSCALE_OPERATOR_UNIT" <<EOF_TAILSCALE_OPERATOR
+[Unit]
+Description=Configure Home Server Tailscale operator
+After=tailscaled.service
+Wants=tailscaled.service
+ConditionPathExists=/usr/bin/tailscale
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/tailscale set --operator=${USERNAME}
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF_TAILSCALE_OPERATOR
+            chmod 0644 "$TAILSCALE_OPERATOR_UNIT"
+        fi
+        ;;
+esac
+
 PRESET_FILE="${DEPLOY}/etc/systemd/system-preset/00-home-server.preset"
 mkdir -p "${DEPLOY}/etc/systemd/system-preset"
 cat > "$PRESET_FILE" <<'EOF_PRESET'
@@ -395,6 +424,10 @@ systemctl --root="$DEPLOY" disable zincati.service || true
 systemctl --root="$DEPLOY" mask zincati.service
 systemctl --root="$DEPLOY" preset rpm-ostreed-automatic.timer
 
+if [[ -f "$TAILSCALE_OPERATOR_UNIT" ]]; then
+    systemctl --root="$DEPLOY" enable home-server-tailscale-operator.service
+fi
+
 [[ "$(systemctl --root="$DEPLOY" is-enabled zincati.service 2>/dev/null || true)" == "masked" ]] || { echo "zincati is not masked in finalized target" >&2; exit 1; }
 [[ "$(systemctl --root="$DEPLOY" is-enabled rpm-ostreed-automatic.timer 2>/dev/null || true)" == "enabled" ]] || { echo "rpm-ostreed-automatic.timer is not enabled in finalized target" >&2; exit 1; }
 [[ -f "$PRESET_FILE" ]] || { echo "Home Server update preset did not survive bootc finalize" >&2; exit 1; }
@@ -415,6 +448,16 @@ else
     [[ ! -e "$SUDOERS_FILE" ]] || { echo "password-backed admin unexpectedly has passwordless sudo rule" >&2; exit 1; }
 fi
 [[ ! -e "${DEPLOY}/etc/systemd/system/home-server-provision-user.service" ]] || { echo "obsolete first-boot provisioning service remains in target" >&2; exit 1; }
+
+case "$IMAGE" in
+    ghcr.io/home-server-project/*)
+        if [[ -x "${DEPLOY}/usr/bin/tailscale" ]]; then
+            [[ -f "$TAILSCALE_OPERATOR_UNIT" ]] || { echo "Tailscale operator unit did not survive bootc finalize" >&2; exit 1; }
+            grep -Fqx "ExecStart=/usr/bin/tailscale set --operator=${USERNAME}" "$TAILSCALE_OPERATOR_UNIT" || { echo "Tailscale operator unit has wrong user" >&2; exit 1; }
+            [[ "$(systemctl --root="$DEPLOY" is-enabled home-server-tailscale-operator.service 2>/dev/null || true)" == "enabled" ]] || { echo "Tailscale operator unit is not enabled" >&2; exit 1; }
+        fi
+        ;;
+esac
 sync
 
 umount "${TARGET_ROOT}/boot/efi"; EFI_MOUNTED=0
